@@ -1,0 +1,30 @@
+#ifndef MODULES_HPP
+#define MODULES_HPP
+
+#include <string>
+#include <unordered_map>
+#include <v8.h>
+
+class IsolateWrapper;
+
+// clang-format off
+#define MODULES_X_LIST \
+    @MODULES@
+
+#define X(MODULE) \
+    v8::Local<v8::Object> MODULE##ModuleTemplate(IsolateWrapper&);
+MODULES_X_LIST
+#undef X
+// clang-format on
+
+using NativeModuleTemplate = v8::Local<v8::Object> (*)(IsolateWrapper&);
+extern std::unordered_map<std::string, NativeModuleTemplate> nativeModulesTemplates;
+
+v8::Local<v8::Object> compileNativeModuleScript(IsolateWrapper& isolateWrapper, const std::string& scriptSource);
+void exportNativeModuleCompiledFunction(v8::Local<v8::Object>& exports, v8::Local<v8::Object>& compiledScript, const char* functioName);
+void exportNativeModuleTrapFunction(v8::Local<v8::Object>& exports, const char* functioName);
+void nativeModuleTrapFunction(const v8::FunctionCallbackInfo<v8::Value>& args);
+void exportNativeModuleStubFunction(v8::Local<v8::Object>& exports, const char* functioName);
+void nativeModuleStubFunction(const v8::FunctionCallbackInfo<v8::Value>& args);
+
+#endif // MODULES_HPP

@@ -1,0 +1,11 @@
+## Sample GN config for compiling V8
+# Target-specific
+target_cpu = "x64"
+is_debug = false
+
+# Simpler embedding by depending only on system libraries and the v8_* libs
+is_component_build = true
+use_sysroot = false
+use_custom_libcxx = false
+v8_enable_i18n_support = false # Removes dependency on custom libicu
+v8_use_snapshot = false # Removes runtime dependency on the binary shapshot files

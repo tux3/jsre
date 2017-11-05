@@ -1,0 +1,9 @@
+{
+  "license": "MIT",
+  "dependencies": {
+    "babel-standalone": "^7.0.0"
+  },
+  "scripts": {
+    "build": "webpack node_modules/babel-standalone/babel.min.js babel.js"
+  }
+}

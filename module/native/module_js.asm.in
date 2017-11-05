@@ -1,0 +1,8 @@
+global @MODULE_NAME@ModuleScript
+default rel
+
+section .rodata
+
+@MODULE_NAME@ModuleScript:
+    incbin "@MODULE_NAME@.js"
+    db 0
