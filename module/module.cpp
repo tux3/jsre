@@ -3,6 +3,7 @@
 #include "ast/walk.hpp"
 #include "ast/ast.hpp"
 #include "analyze/identresolution.hpp"
+#include "analyze/unused.hpp"
 #include "babel.hpp"
 #include "global.hpp"
 #include "moduleresolver.hpp"
@@ -15,12 +16,11 @@
 
 using json = nlohmann::json;
 using namespace std;
-namespace fs = experimental::filesystem;
+namespace fs = filesystem;
 
 Module::Module(IsolateWrapper& isolateWrapper, fs::path path)
     : BasicModule(isolateWrapper)
     , path{ path }
-    , identifierResolutionDone{false}
 {
     v8::Isolate::Scope isolateScope(isolate);
     v8::HandleScope handleScope(isolate);
@@ -33,18 +33,89 @@ Module::Module(IsolateWrapper& isolateWrapper, fs::path path)
 
     originalSource = readFileStr(path.c_str());
     std::tie(transpiledSource, jast) = transpileScript(isolateWrapper, originalSource);
-    ast = importBabylonAst(jast);
-}
-
-void Module::analyze()
-{
-    resolveIdentifiers();
-
+    ast = importBabylonAst(*this, jast);
 }
 
 const AstRoot& Module::getAst()
 {
     return *ast;
+}
+
+void Module::analyze()
+{
+    resolveLocalIdentifiers();
+    resolveLocalXRefs();
+    resolveImportedIdentifiers();
+
+    findUnusedLocalDeclarations(*this);
+
+    // A good analysis strategy might be to start with the symbols we have in our local module,
+    // and move to imports whenever they are actually used by our local code.
+    //
+    // This means we'll know a real use/call site for almost every symbol we analyze,
+    // We'll also be able to mark any analyzed symbols, and whatever's left at the end is apparently unused (warn about it)
+}
+
+void Module::resolveLocalIdentifiers()
+{
+    using namespace v8;
+
+    if (localIdentifierResolutionDone)
+        return;
+    localIdentifierResolutionDone = true;
+
+    trace("Resolving local identifiers for module "+path.string());
+    Isolate::Scope isolateScope(isolate);
+    HandleScope handleScope(isolate);
+    Local<Context> context = persistentContext.Get(isolate);
+    Context::Scope contextScope(context);
+    Local<v8::Module> module = getExecutableModule();
+
+    IdentifierResolutionResult result = resolveModuleIdentifiers(context, ast);
+    resolvedLocalIdentifiers = result.resolvedIdentifiers;
+    missingContextIdentifiers = result.missingGlobalIdentifiers;
+
+    // Any missing identifier in one of our imports is also considered missing in our module,
+    // because imports are evaluated by v8 in the current module's context,
+    // so we need to have any missing global symbols of our imports in our own context.
+    for (int i=0; i<module->GetModuleRequestsLength(); ++i) {
+        auto importName = module->GetModuleRequest(i);
+        v8::String::Utf8Value importNameStr(isolate, importName);
+        if (NativeModule::hasModule(*importNameStr))
+            continue;
+        Module& importedModule = reinterpret_cast<Module&>(ModuleResolver::getModule(*this, *importNameStr, true));
+        missingContextIdentifiers.insert(missingContextIdentifiers.end(), importedModule.missingContextIdentifiers.begin(), importedModule.missingContextIdentifiers.end());
+    }
+}
+
+void Module::resolveLocalXRefs()
+{
+    if (localXRefsDone)
+        return;
+    localXRefsDone = true;
+
+    for (auto idToDecl : resolvedLocalIdentifiers) {
+        auto& usages = localXRefs[idToDecl.second];
+        usages.push_back(idToDecl.first);
+    }
+}
+
+void Module::resolveImportedIdentifiers()
+{
+    using namespace v8;
+
+    if (importedIdentifierResolutionDone)
+        return;
+    importedIdentifierResolutionDone = true;
+
+    // TODO: It's time to take advantage of the import & module system we painstakingly build!
+    // Let's resolve cross-file references.
+    //
+    // Make a function that takes an ES6 ImportSpecifier and returns the declaration of the exported identifier in the imported module
+    // And we don't want to return the node at the exported identifier, but the declaration of the local identifier in the imported module
+
+    //trace("Resolving imported identifiers for module "+path.string());
+
 }
 
 v8::Local<v8::Module> Module::compileModuleFromSource(const string& filename, const string& source)
@@ -79,38 +150,6 @@ v8::Local<v8::Module> Module::compileModuleFromSource(const string& filename, co
     return module;
 }
 
-void Module::resolveIdentifiers()
-{
-    using namespace v8;
-
-    if (identifierResolutionDone)
-        return;
-    identifierResolutionDone = true;
-
-    trace("Resolving identifiers for module "+path.string());
-    Isolate::Scope isolateScope(isolate);
-    HandleScope handleScope(isolate);
-    Local<Context> context = persistentContext.Get(isolate);
-    Context::Scope contextScope(context);
-    Local<v8::Module> module = getCompiledModule();
-
-    IdentifierResolutionResult result = resolveModuleIdentifiers(context, ast);
-    resolvedIdentifiers = result.resolvedIdentifiers;
-    missingGlobalIdentifiers = result.missingGlobalIdentifiers;
-
-    // Any missing identifier in one of our imports is also considered missing in our module,
-    // because imports are evaluated by v8 in the current module's context,
-    // so we need to have any missing global symbols of our imports in our own context.
-    for (int i=0; i<module->GetModuleRequestsLength(); ++i) {
-        auto importName = module->GetModuleRequest(i);
-        v8::String::Utf8Value importNameStr(isolate, importName);
-        if (NativeModule::hasModule(*importNameStr))
-            continue;
-        Module& importedModule = reinterpret_cast<Module&>(ModuleResolver::getModule(*this, *importNameStr, true));
-        missingGlobalIdentifiers.insert(missingGlobalIdentifiers.end(), importedModule.missingGlobalIdentifiers.begin(), importedModule.missingGlobalIdentifiers.end());
-    }
-}
-
 v8::Local<v8::Module> Module::getCompiledModule()
 {
     using namespace v8;
@@ -121,19 +160,32 @@ v8::Local<v8::Module> Module::getCompiledModule()
     if (compiledModule.IsEmpty()) {
         auto module = compileModuleFromSource(path, transpiledSource);
         compiledModule.Reset(isolate, module);
-        resolveIdentifiers();
     }
     return handleScope.Escape(compiledModule.Get(isolate));
 }
 
-v8::Local<v8::Module> Module::getCompiledES6Module()
+v8::Local<v8::Module> Module::getExecutableModule()
+{
+    using namespace v8;
+
+    Isolate::Scope isolateScope(isolate);
+    EscapableHandleScope handleScope(isolate);
+    Local<v8::Module> compiledModule = getCompiledModule();
+
+    // This is necessary before the module is ready to be run!
+    resolveLocalIdentifiers();
+
+    return handleScope.Escape(compiledModule);
+}
+
+v8::Local<v8::Module> Module::getExecutableES6Module()
 {
     using namespace v8;
 
     Isolate::Scope isolateScope(isolate);
     EscapableHandleScope handleScope(isolate);
 
-    auto module = getCompiledModule();
+    auto module = getExecutableModule();
     if (isES6Module())
         return module;
 
@@ -159,9 +211,26 @@ v8::Local<v8::Module> Module::getCompiledES6Module()
     return handleScope.Escape(compiledThunkModule.Get(isolate));
 }
 
+int Module::getCompiledModuleIdentityHash()
+{
+    return getCompiledModule()->GetIdentityHash();
+}
+
 string Module::getPath() const
 {
     return path;
+}
+
+std::unordered_map<Identifier *, std::vector<Identifier *> > Module::getLocalXRefs()
+{
+    resolveLocalXRefs();
+    return localXRefs;
+}
+
+std::unordered_map<Identifier *, Identifier *> Module::getResolvedLocalIdentifiers()
+{
+    resolveLocalIdentifiers();
+    return resolvedLocalIdentifiers;
 }
 
 void Module::resolveExports()
@@ -175,8 +244,8 @@ void Module::resolveExports()
     TryCatch trycatch(isolate);
     Local<Context> context = persistentContext.Get(isolate);
     Context::Scope contextScope(context);
-    Local<v8::Module> module = getCompiledModule();
-    defineMissingGlobalIdentifiers(context, missingGlobalIdentifiers);
+    Local<v8::Module> module = getExecutableModule();
+    defineMissingGlobalIdentifiers(context, missingContextIdentifiers);
 
     if (auto maybeBool = module->InstantiateModule(context, ModuleResolver::resolveImportCallback); maybeBool.IsNothing() || !maybeBool.ToChecked()) {
         reportV8Exception(isolate, &trycatch);
@@ -213,25 +282,61 @@ bool Module::isES6Module()
     return false;
 }
 
-/// TODO: Remove this function, it's just not useful for anything now
-std::string Module::resolveImports(v8::Local<v8::Context>& context)
+void Module::resolveProjectImports(std::filesystem::path projectDir)
 {
-    v8::Context::Scope contextScope(context);
-    v8::TryCatch trycatch(context->GetIsolate());
+    using namespace v8;
 
-    std::string resolvedSource = originalSource;
-    size_t offset = 0;
-    const json& bodyAst = jast["program"]["body"];
-    for (const json& statement : bodyAst) {
-        if (statement["type"] != "ImportDeclaration")
+    if (importsResolved)
+        return;
+    importsResolved = true;
+
+    trace("Resolving imports of module "+path.string());
+
+    Isolate::Scope isolateScope(isolate);
+    HandleScope handleScope(isolate);
+
+    // Resolve ES6 imports
+    auto module = getCompiledModule();
+    for (int i=0; i<module->GetModuleRequestsLength(); ++i) {
+        auto importName = module->GetModuleRequest(i);
+        String::Utf8Value importNameStr(isolate, importName);
+        if (NativeModule::hasModule(*importNameStr))
             continue;
-        size_t start = statement["start"], size = (size_t)statement["end"] - start + 1;
-        resolvedSource.erase(start - offset, size);
-        offset += size;
-
-        BasicModule& importedModule = ModuleResolver::getModule(static_cast<BasicModule&>(*this), statement["source"]["value"]);
-        importedModule.getExports();
+        Module& importedModule = reinterpret_cast<Module&>(ModuleResolver::getModule(*this, *importNameStr, true));
+        if (ModuleResolver::isProjectModule(projectDir, importedModule.path))
+            importedModule.resolveProjectImports(projectDir);
     }
 
-    return resolvedSource;
+    // Resolve imports through require() calls
+    // TODO: We only resolve require calls taking a literal now, we should try to get possibly values if it takes an identifier!
+    // For example if there's an if/else assigning a variable, and we import that variable, at some point we should aim to resolve that!
+    walkAst(*ast, [&](AstNode& node){
+        auto parent = (CallExpression*)node.getParent();
+        const auto& args = parent->getArguments();
+        if (args.size() < 1 || args[0]->getType() != AstNodeType::StringLiteral)
+            return;
+        auto arg = ((StringLiteral*)args[0])->getValue();
+
+        // TODO: v8 gives parse errors if we import a .json directly, we need to autogenerate a wrapper of some sort for json modules
+        // (This shows again that JSON is not JS!)
+        if (fs::path(arg).extension() == ".json")
+            return;
+
+        if (NativeModule::hasModule(arg))
+            return;
+        try {
+            Module& importedModule = reinterpret_cast<Module&>(ModuleResolver::getModule(*this, arg, false));
+            if (ModuleResolver::isProjectModule(projectDir, importedModule.path))
+                importedModule.resolveProjectImports(projectDir);
+        } catch (std::runtime_error&) {
+            // This is fine. We're trying to resolve every require() everywhere,
+            // not just those reachable from the global scope, so some are expected to fail...
+        }
+    }, [&](AstNode& node) {
+        if (node.getType() != AstNodeType::Identifier
+                || node.getParent()->getType() != AstNodeType::CallExpression)
+            return false;
+        auto& id = (Identifier&)node;
+        return id.getName() == "require" && resolvedLocalIdentifiers.find(&id) == resolvedLocalIdentifiers.end();
+    });
 }

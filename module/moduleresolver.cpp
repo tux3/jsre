@@ -3,13 +3,13 @@
 #include "isolatewrapper.hpp"
 #include "reporting.hpp"
 #include "analyze/identresolution.hpp"
-#include <experimental/filesystem>
+#include <filesystem>
 #include <iostream>
 #include <json.hpp>
 #include <v8.h>
 
 using namespace std;
-namespace fs = experimental::filesystem;
+namespace fs = filesystem;
 using json = nlohmann::json;
 
 unordered_map<std::string, NativeModule> ModuleResolver::nativeModuleMap;
@@ -21,7 +21,7 @@ BasicModule& ModuleResolver::getModule(const BasicModule& from, string requested
     return getModule(from.getIsolateWrapper(), from.getPath(), requestedName, isImport);
 }
 
-BasicModule& ModuleResolver::getModule(IsolateWrapper& isolateWrapper, std::experimental::filesystem::path basePath, std::string requestedName, bool isImport)
+BasicModule& ModuleResolver::getModule(IsolateWrapper& isolateWrapper, std::filesystem::path basePath, std::string requestedName, bool isImport)
 {
     if (!isImport && NativeModule::hasModule(requestedName))
         return nativeModuleMap.try_emplace(requestedName, isolateWrapper, requestedName).first->second;
@@ -37,8 +37,35 @@ BasicModule& ModuleResolver::getModule(IsolateWrapper& isolateWrapper, std::expe
     v8::HandleScope scope(*isolateWrapper);
     fullPath = fs::canonical(fullPath);
     auto& module = moduleMap.try_emplace(fullPath, isolateWrapper, fullPath).first->second;
-    compiledModuleMap.emplace(module.getCompiledModule()->GetIdentityHash(), module);
+    compiledModuleMap.emplace(module.getCompiledModuleIdentityHash(), module);
     return module;
+}
+
+fs::path ModuleResolver::getProjectMainFile(fs::path projectDir)
+{
+    fs::path packageJsonPath = projectDir / "package.json";
+    if (!fs::is_regular_file(packageJsonPath))
+        fatal("Could not find a package.json in "+projectDir.string());
+    return projectDir / getNodeModuleMainFile(packageJsonPath);
+}
+
+bool ModuleResolver::isProjectModule(fs::path projectDir, fs::path filePath)
+{
+    fs::path relative = std::filesystem::relative(filePath, projectDir);
+    return relative.begin()->string() != ".."
+            && relative.string().find("node_modules") == string::npos;
+}
+
+std::vector<Module *> ModuleResolver::getLoadedProjectModules(fs::path projectDir)
+{
+    vector<Module*> projectMods;
+    for (auto& elem : moduleMap) {
+        auto& mod = elem.second;
+        if (!isProjectModule(projectDir, mod.getPath()))
+            continue;
+        projectMods.push_back(&mod);
+    }
+    return projectMods;
 }
 
 fs::path ModuleResolver::resolve(fs::path fromPath, string requestedName)
@@ -71,7 +98,7 @@ fs::path ModuleResolver::resolveNodeModule(fs::path basePath, string requestedNa
     }
 
     fs::path parentPath = basePath.parent_path();
-    if (!parentPath.empty())
+    if (parentPath != basePath)
         return resolveNodeModule(parentPath, requestedName);
     else
         return {};
@@ -163,7 +190,7 @@ v8::MaybeLocal<v8::Module> ModuleResolver::resolveImportCallback(v8::Local<v8::C
         return nativeModuleMap.try_emplace(*specifierStr, referrerModule.getIsolateWrapper(), *specifierStr).first->second.getWrapperModule();
 
     Module& importedModule = reinterpret_cast<Module&>(getModule(referrerModule, *specifierStr, true));
-    v8::Local<v8::Module> importedCompiledModule = importedModule.getCompiledES6Module();
+    v8::Local<v8::Module> importedCompiledModule = importedModule.getExecutableES6Module();
 
     return handleScope.Escape(importedCompiledModule);
 }

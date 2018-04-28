@@ -84,8 +84,9 @@
 
 class AstRoot;
 class AstNode;
+class Module;
 
-AstRoot* importBabylonAst(const nlohmann::json& ast);
+AstRoot* importBabylonAst(Module &parentModule, const nlohmann::json& ast);
 AstNode* importNode(const nlohmann::json& node);
 AstNode* importNodeOrNullptr(const nlohmann::json& node, const char* name);
 

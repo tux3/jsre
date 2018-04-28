@@ -1,7 +1,9 @@
 #include "identresolution.hpp"
 #include "ast/ast.hpp"
 #include "ast/walk.hpp"
+#include "analyze/astqueries.hpp"
 #include "reporting.hpp"
+#include "module/moduleresolver.hpp"
 #include <vector>
 #include <unordered_map>
 #include <unordered_set>
@@ -13,7 +15,7 @@ struct Scope {
     bool isBlockScope;
 };
 
-bool isFullScopeNodeType(AstNodeType type)
+static bool isFullScopeNodeType(AstNodeType type)
 {
     return type == AstNodeType::Root
             || type == AstNodeType::ClassBody
@@ -25,7 +27,7 @@ bool isFullScopeNodeType(AstNodeType type)
             || type == AstNodeType::FunctionDeclaration;
 }
 
-bool isBlockScopeNodeType(AstNodeType type)
+static bool isBlockScopeNodeType(AstNodeType type)
 {
     return type == AstNodeType::BlockStatement
             || type == AstNodeType::CatchClause
@@ -36,7 +38,7 @@ bool isBlockScopeNodeType(AstNodeType type)
 }
 
 // True if this identifier is not a local declaration, but refers to an exported or imported name
-bool isExternalIdentifier(Identifier& node)
+static bool isExternalIdentifier(Identifier& node)
 {
     auto parent = node.getParent();
     if (parent->getType() == AstNodeType::ImportSpecifier) {
@@ -57,7 +59,7 @@ bool isExternalIdentifier(Identifier& node)
 }
 
 // True if this identifier refers to an object property through a member expression, and not to a value in a local scope
-bool isMemberExpressionPropertyIdentifier(Identifier& node)
+static bool isMemberExpressionPropertyIdentifier(Identifier& node)
 {
     auto parent = node.getParent();
     if (parent->getType() != AstNodeType::MemberExpression)
@@ -65,26 +67,8 @@ bool isMemberExpressionPropertyIdentifier(Identifier& node)
     return ((MemberExpression*)parent)->getProperty() == &node;
 }
 
-// True is this identifier introduces a property or method of an object or class, but is not part of any scope (accessed through member expressions)
-bool isUnscopedPropertyOrMethodIdentifier(Identifier& node)
-{
-    auto parent = node.getParent();
-    if (parent->getType() == AstNodeType::ObjectProperty)
-        return ((ObjectProperty*)parent)->getKey() == &node;
-    else if (parent->getType() == AstNodeType::ClassProperty)
-        return ((ClassProperty*)parent)->getKey() == &node;
-    else if (parent->getType() == AstNodeType::ClassPrivateProperty)
-        return ((ClassProperty*)parent)->getKey() == &node;
-    else if (parent->getType() == AstNodeType::ClassMethod)
-        return ((ClassMethod*)parent)->getKey() == &node;
-    else if (parent->getType() == AstNodeType::ClassPrivateMethod)
-        return ((ClassMethod*)parent)->getKey() == &node;
-    else
-        return false;
-}
-
 // True if this identifier is a declaration for a "var" variable (not block scoped)
-bool isVarDeclarationIdentifier(Identifier& node)
+static bool isVarDeclarationIdentifier(Identifier& node)
 {
     auto parent = node.getParent();
     if (parent->getType() != AstNodeType::VariableDeclarator)
@@ -111,7 +95,7 @@ static void addDeclaration(vector<Scope>& scopes, Identifier& id)
     }
 }
 
-void findImportDeclarations(vector<Scope>& scopes, AstNode& node)
+static void findImportDeclarations(vector<Scope>& scopes, AstNode& node)
 {
     auto specifiers = ((ImportDeclaration&)node).getSpecifiers();
     for (auto specifier : specifiers) {
@@ -130,7 +114,7 @@ void findImportDeclarations(vector<Scope>& scopes, AstNode& node)
     }
 }
 
-void findIdentifierOrFancyDeclarations(vector<Scope>& scopes, AstNode& id)
+static void findIdentifierOrFancyDeclarations(vector<Scope>& scopes, AstNode& id)
 {
     auto type = id.getType();
     if (type == AstNodeType::Identifier) {
@@ -140,25 +124,25 @@ void findIdentifierOrFancyDeclarations(vector<Scope>& scopes, AstNode& id)
         for (auto declarator : declarators)
             findIdentifierOrFancyDeclarations(scopes, *((VariableDeclarator*)declarator)->getId());
     } else if (type == AstNodeType::ObjectPattern) {
-        auto patternNode = (ObjectPattern&)id;
+        auto& patternNode = (ObjectPattern&)id;
         for (auto prop : patternNode.getProperties())
             findIdentifierOrFancyDeclarations(scopes, *prop->getKey());
     } else if (type == AstNodeType::ArrayPattern) {
-        auto patternNode = (ArrayPattern&)id;
+        auto& patternNode = (ArrayPattern&)id;
         for (auto elem : patternNode.getElements())
             findIdentifierOrFancyDeclarations(scopes, *elem);
     } else if (type == AstNodeType::AssignmentPattern) {
-        auto patternNode = (AssignmentPattern&)id;
+        auto& patternNode = (AssignmentPattern&)id;
         findIdentifierOrFancyDeclarations(scopes, *patternNode.getLeft());
     } else if (type == AstNodeType::RestElement) {
-        auto patternNode = (RestElement&)id;
+        auto& patternNode = (RestElement&)id;
         findIdentifierOrFancyDeclarations(scopes, *patternNode.getArgument());
     } else {
         throw std::runtime_error("Unexpected id type for identifier or object pattern: "s+id.getTypeName());
     }
 }
 
-void findScopeDeclarations(vector<Scope>& scopes, AstNode& scopeNode)
+static void findScopeDeclarations(vector<Scope>& scopes, AstNode& scopeNode)
 {
     vector<AstNode*> children;
     switch (scopeNode.getType()) {
@@ -172,7 +156,7 @@ void findScopeDeclarations(vector<Scope>& scopes, AstNode& scopeNode)
     case AstNodeType::ClassMethod:
     case AstNodeType::ClassPrivateMethod:
     {
-        auto fun = (Function&)scopeNode;
+        auto& fun = (Function&)scopeNode;
         children = fun.getBody()->getChildren();
         for (auto param : fun.getParams()) {
             // paran can also be an AssignmentPattern!
@@ -182,25 +166,25 @@ void findScopeDeclarations(vector<Scope>& scopes, AstNode& scopeNode)
     }
     case AstNodeType::CatchClause:
     {
-        auto clause = (CatchClause&)scopeNode;
+        auto& clause = (CatchClause&)scopeNode;
         findIdentifierOrFancyDeclarations(scopes, *clause.getParam());
         break;
     }
     case AstNodeType::ForInStatement:
     {
-        auto node = (ForInStatement&)scopeNode;
+        auto& node = (ForInStatement&)scopeNode;
         findIdentifierOrFancyDeclarations(scopes, *node.getLeft());
         break;
     }
     case AstNodeType::ForOfStatement:
     {
-        auto node = (ForOfStatement&)scopeNode;
+        auto& node = (ForOfStatement&)scopeNode;
         findIdentifierOrFancyDeclarations(scopes, *node.getLeft());
         break;
     }
     case AstNodeType::ForStatement:
     {
-        auto node = (ForStatement&)scopeNode;
+        auto& node = (ForStatement&)scopeNode;
         if (auto init = node.getInit(); init && init->getType() == AstNodeType::VariableDeclaration)
             findIdentifierOrFancyDeclarations(scopes, *init);
         break;
@@ -333,4 +317,18 @@ void defineMissingGlobalIdentifiers(v8::Local<v8::Context> context, const std::v
         if (!global->Has(nameStr))
             global->Set(nameStr, poserObject);
     }
+}
+
+AstNode *resolveImportedIdentifierDeclaration(ImportSpecifier &importSpec)
+{
+    Module& sourceMod = importSpec.getParentModule();
+    auto importDeclNode = (ImportDeclaration*)importSpec.getParent();
+    const string& source = importDeclNode->getSource();
+
+    if (NativeModule::hasModule(source))
+        return nullptr;
+    Module& importedMod = reinterpret_cast<Module&>(ModuleResolver::getModule(sourceMod, source, true));
+
+    /// TODO: This
+    throw std::runtime_error("Not implemented!");
 }

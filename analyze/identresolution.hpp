@@ -4,8 +4,10 @@
 #include <unordered_map>
 #include <v8.h>
 
+class AstNode;
 class AstRoot;
 class Identifier;
+class ImportSpecifier;
 
 struct IdentifierResolutionResult
 {
@@ -31,5 +33,13 @@ IdentifierResolutionResult resolveModuleIdentifiers(v8::Local<v8::Context> conte
  * unresolvedTopLevelIdentifiers should be the result returned by resolveModuleIdentifiers
  */
 void defineMissingGlobalIdentifiers(v8::Local<v8::Context> context, const std::vector<std::string>& missingGlobalIdentifiers);
+
+/**
+ * Finds the declaration of the identifier local to the imported module and imported by that specifier.
+ * This does not try to return an ExportSpecifier, but the declaration of the identifier under its original name.
+ *
+ * Return nullptr if this import specifier refers to a native module, or if the declaration couldn't be found.
+ */
+AstNode* resolveImportedIdentifierDeclaration(ImportSpecifier& importSpec);
 
 #endif // IDENTRESOLUTION_HPP

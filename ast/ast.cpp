@@ -13,6 +13,15 @@ AstNode* AstNode::getParent()
     return parent;
 }
 
+Module& AstNode::getParentModule()
+{
+    AstNode* node = this;
+    while (node->type != AstNodeType::Root)
+        node = node->getParent();
+    auto root = reinterpret_cast<AstRoot*>(node);
+    return root->getParentModule();
+}
+
 AstNodeType AstNode::getType() {
     return type;
 }
@@ -35,8 +44,9 @@ void AstNode::setParentOfChildren() {
             child->parent = this;
 }
 
-AstRoot::AstRoot(vector<AstNode*> body)
+AstRoot::AstRoot(Module &parentModule, vector<AstNode*> body)
     : AstNode(AstNodeType::Root)
+    , parentModule{ parentModule }
     , body{ body }
 {
     setParentOfChildren();
@@ -79,6 +89,11 @@ StringLiteral::StringLiteral(string value)
     setParentOfChildren();
 }
 
+const string &StringLiteral::getValue()
+{
+    return value;
+}
+
 BooleanLiteral::BooleanLiteral(bool value)
     : AstNode(AstNodeType::BooleanLiteral)
     , value{ value }
@@ -86,11 +101,21 @@ BooleanLiteral::BooleanLiteral(bool value)
     setParentOfChildren();
 }
 
+bool BooleanLiteral::getValue()
+{
+    return value;
+}
+
 NumericLiteral::NumericLiteral(double value)
     : AstNode(AstNodeType::NumericLiteral)
     , value{ value }
 {
     setParentOfChildren();
+}
+
+double NumericLiteral::getValue()
+{
+    return value;
 }
 
 TemplateLiteral::TemplateLiteral(std::vector<AstNode*> quasis, std::vector<AstNode*> expressions)
@@ -506,6 +531,11 @@ CallExpression::CallExpression(AstNode* callee, vector<AstNode*> arguments)
     setParentOfChildren();
 }
 
+const std::vector<AstNode *> &CallExpression::getArguments()
+{
+    return arguments;
+}
+
 CallExpression::CallExpression(AstNodeType type, AstNode* callee, vector<AstNode*> arguments)
     : AstNode(type)
     , callee{ callee }
@@ -739,6 +769,13 @@ ImportDeclaration::ImportDeclaration(std::vector<AstNode*> specifiers, AstNode* 
     setParentOfChildren();
 }
 
+string ImportDeclaration::getSource()
+{
+    assert(source->getType() == AstNodeType::StringLiteral);
+    auto sourceLiteral = (StringLiteral*)source;
+    return sourceLiteral->getValue();
+}
+
 const std::vector<AstNode*>& ImportDeclaration::getSpecifiers()
 {
     return specifiers;
@@ -746,9 +783,12 @@ const std::vector<AstNode*>& ImportDeclaration::getSpecifiers()
 
 ImportSpecifier::ImportSpecifier(AstNode* local, AstNode* imported)
     : AstNode(AstNodeType::ImportSpecifier)
-    , local{ local }
-    , imported{ imported }
+    , local{ (Identifier*)local }
+    , imported{ (Identifier*)imported }
+    , localEqualsImported{ this->local->getName() == this->imported->getName() }
 {
+    assert(local->getType() == AstNodeType::Identifier);
+    assert(imported->getType() == AstNodeType::Identifier);
     setParentOfChildren();
 }
 

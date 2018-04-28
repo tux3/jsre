@@ -16,8 +16,10 @@ enum class AstNodeType {
 class AstNode {
 public:
     AstNode(AstNodeType type);
+    AstNode(const AstNode& other) = delete;
     virtual ~AstNode() = default;
     AstNode* getParent();
+    Module& getParentModule();
     AstNodeType getType();
     const char* getTypeName();
     virtual std::vector<AstNode*> getChildren();
@@ -32,11 +34,12 @@ private:
 
 class AstRoot : public AstNode {
 public:
-    AstRoot(std::vector<AstNode*> body = {});
+    AstRoot(Module& parentModule, std::vector<AstNode*> body = {});
     const std::vector<AstNode*>& getBody();
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
+    Module& parentModule;
     std::vector<AstNode*> body;
 };
 
@@ -65,6 +68,7 @@ public:
 class StringLiteral : public AstNode {
 public:
     StringLiteral(std::string value);
+    const std::string& getValue();
 
 private:
     std::string value;
@@ -73,6 +77,7 @@ private:
 class BooleanLiteral : public AstNode {
 public:
     BooleanLiteral(bool value);
+    bool getValue();
 
 private:
     bool value;
@@ -81,6 +86,7 @@ private:
 class NumericLiteral : public AstNode {
 public:
     NumericLiteral(double value);
+    double getValue();
 
 private:
     double value;
@@ -517,6 +523,7 @@ private:
 class CallExpression : public AstNode {
 public:
     CallExpression(AstNode* callee, std::vector<AstNode*> arguments);
+    const std::vector<AstNode*>& getArguments();
     virtual std::vector<AstNode*> getChildren() override;
 
 protected:
@@ -768,6 +775,7 @@ private:
 class ImportDeclaration : public AstNode {
 public:
     ImportDeclaration(std::vector<AstNode*> specifiers, AstNode* source);
+    std::string getSource();
     const std::vector<AstNode*>& getSpecifiers();
     virtual std::vector<AstNode*> getChildren() override;
 
@@ -784,7 +792,8 @@ public:
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
-    AstNode *local, *imported;
+    Identifier *local, *imported;
+    bool localEqualsImported;
 };
 
 class ImportDefaultSpecifier : public AstNode {

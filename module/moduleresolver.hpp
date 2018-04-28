@@ -3,6 +3,8 @@
 
 #include "module.hpp"
 #include "nativemodule.hpp"
+#include <filesystem>
+#include <string>
 #include <v8.h>
 
 class IsolateWrapper;
@@ -10,16 +12,19 @@ class IsolateWrapper;
 class ModuleResolver {
 public:
     static BasicModule& getModule(const BasicModule& from, std::string requestedName, bool isImport = false);
-    static BasicModule& getModule(IsolateWrapper& isolateWrapper, std::experimental::filesystem::path basePath, std::string requestedName, bool isImport = false);
+    static BasicModule& getModule(IsolateWrapper& isolateWrapper, std::filesystem::path basePath, std::string requestedName, bool isImport = false);
+    static std::filesystem::path getProjectMainFile(std::filesystem::path projectDir);
+    static bool isProjectModule(std::filesystem::path projectDir, std::filesystem::path filePath);
+    static std::vector<Module*> getLoadedProjectModules(std::filesystem::path projectDir);
     static void requireFunction(const v8::FunctionCallbackInfo<v8::Value>& args);
     static v8::MaybeLocal<v8::Module> resolveImportCallback(v8::Local<v8::Context> context, v8::Local<v8::String> specifier, v8::Local<v8::Module> referrer);
 
 private:
-    static std::experimental::filesystem::path resolve(std::experimental::filesystem::path fromPath, std::string requestedName);
-    static std::experimental::filesystem::path resolveAsFile(std::experimental::filesystem::path path);
-    static std::experimental::filesystem::path resolveAsDirectory(std::experimental::filesystem::path path);
-    static std::experimental::filesystem::path resolveNodeModule(std::experimental::filesystem::path basePath, std::string requestedName);
-    static std::string getNodeModuleMainFile(std::experimental::filesystem::path packageFilePath);
+    static std::filesystem::path resolve(std::filesystem::path fromPath, std::string requestedName);
+    static std::filesystem::path resolveAsFile(std::filesystem::path path);
+    static std::filesystem::path resolveAsDirectory(std::filesystem::path path);
+    static std::filesystem::path resolveNodeModule(std::filesystem::path basePath, std::string requestedName);
+    static std::string getNodeModuleMainFile(std::filesystem::path packageFilePath);
 
 private:
     static std::unordered_map<std::string, NativeModule> nativeModuleMap;

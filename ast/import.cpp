@@ -7,6 +7,8 @@
 using namespace std;
 using json = nlohmann::json;
 
+class Module;
+
 #define X(NODE) AstNode* import##NODE(const json&);
 IMPORTED_NODE_LIST(X)
 #undef X
@@ -17,7 +19,7 @@ static const unordered_map<string, AstNode* (*)(const json&)> importFunctions = 
 };
 #undef X
 
-AstRoot* importBabylonAst(const json& jast)
+AstRoot* importBabylonAst(Module& parentModule, const json& jast)
 {
     json program = jast["program"];
     assert(program["type"] == "Program");
@@ -26,7 +28,7 @@ AstRoot* importBabylonAst(const json& jast)
     for (auto&& jnode : program["body"])
         bodyNodes.push_back(importNode(jnode));
 
-    return new AstRoot(bodyNodes);
+    return new AstRoot(parentModule, bodyNodes);
 }
 
 AstNode* importNode(const json& node)

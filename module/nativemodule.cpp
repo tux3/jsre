@@ -63,7 +63,7 @@ std::vector<std::string> NativeModule::getNativeModuleNames()
     return names;
 }
 
-bool NativeModule::hasModule(std::string name)
+bool NativeModule::hasModule(const std::string& name)
 {
     return nativeModulesTemplates.find(name) != nativeModulesTemplates.end();
 }

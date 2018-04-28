@@ -67,8 +67,3 @@ std::pair<std::string, nlohmann::json> transpileScript(IsolateWrapper& isolateWr
     json json = json::parse(*jsonStrUtf8, *jsonStrUtf8 + jsonStrUtf8.length());
     return { json["code"].get<std::string>(), json["ast"] };
 }
-
-nlohmann::json getBabelConfigForFile(const std::experimental::filesystem::__cxx11::path& sourcePath)
-{
-    /// TODO: This
-}

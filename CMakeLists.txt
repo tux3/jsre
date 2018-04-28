@@ -57,7 +57,7 @@ add_headers_sources(
     v8 isolatewrapper utils babel global reporting
     module/basicmodule module/nativemodule module/module module/moduleresolver module/native/modules
     ast/ast ast/walk ast/import
-    analyze/identresolution
+    analyze/identresolution analyze/unused analyze/astqueries
 )
 
 # TODO: Make a half-hearted attempt at calling a FindV8.cmake or pkg-config

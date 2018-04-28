@@ -237,7 +237,12 @@ vector<AstNode*> ImportDeclaration::getChildren() {
 }
 
 vector<AstNode*> ImportSpecifier::getChildren() {
-    return {local, imported};
+    // We don't want to walk through two identifiers when there's only one written down in the source code
+    // Having the imported available on demand is nice for consistency, but not when walking the AST
+    if (localEqualsImported)
+        return {local};
+    else
+        return {local, imported};
 }
 
 vector<AstNode*> ImportDefaultSpecifier::getChildren() {

@@ -6,6 +6,6 @@
 #include "ast/ast.hpp"
 
 using AstNodeCallback = std::function<void(AstNode&)>;
-void walkAst(AstNode& root, AstNodeCallback cb, std::function<bool(AstNode&)> predicate = [](auto){return true;});
+void walkAst(AstNode& root, AstNodeCallback cb, std::function<bool(AstNode&)> predicate = [](auto&){return true;});
 
 #endif // WALK_HPP

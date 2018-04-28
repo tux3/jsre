@@ -13,7 +13,7 @@ public:
     v8::MaybeLocal<v8::Module> getWrapperModule();
 
     static std::vector<std::string> getNativeModuleNames();
-    static bool hasModule(std::string name);
+    static bool hasModule(const std::string &name);
 
 private:
     virtual void resolveExports() override;
