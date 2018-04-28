@@ -3,8 +3,9 @@
 
 #include <json.hpp>
 #include <vector>
+#include "ast/ast.hpp"
 
-using AstNodeCallback = bool (*)(nlohmann::json&);
-void walkAst(nlohmann::json& astNode, AstNodeCallback);
+using AstNodeCallback = std::function<void(AstNode&)>;
+void walkAst(AstNode& root, AstNodeCallback cb, std::function<bool(AstNode&)> predicate = [](auto){return true;});
 
 #endif // WALK_HPP

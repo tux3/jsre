@@ -79,7 +79,8 @@
     X(ExportNamedDeclaration)   \
     X(ExportDefaultDeclaration) \
     X(ExportAllDeclaration)     \
-    X(ExportSpecifier)
+    X(ExportSpecifier)          \
+    X(ExportDefaultSpecifier)
 
 class AstRoot;
 class AstNode;

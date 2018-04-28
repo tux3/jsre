@@ -2,9 +2,11 @@
 #include "ast/import.hpp"
 #include "ast/walk.hpp"
 #include "ast/ast.hpp"
+#include "analyze/identresolution.hpp"
 #include "babel.hpp"
 #include "global.hpp"
 #include "moduleresolver.hpp"
+#include "reporting.hpp"
 #include "utils.hpp"
 #include <iostream>
 #include <json.hpp>
@@ -18,17 +20,26 @@ namespace fs = experimental::filesystem;
 Module::Module(IsolateWrapper& isolateWrapper, fs::path path)
     : BasicModule(isolateWrapper)
     , path{ path }
+    , identifierResolutionDone{false}
 {
     v8::Isolate::Scope isolateScope(isolate);
     v8::HandleScope handleScope(isolate);
     v8::Local<v8::String> filename = v8::String::NewFromUtf8(isolate, path.c_str());
     v8::Local<v8::Context> context = prepareGlobalContext(isolateWrapper);
+    v8::Local<v8::Function> localRequire = v8::Function::New(context, ModuleResolver::requireFunction, filename).ToLocalChecked();
+    context->Global()->Set(context, v8::String::NewFromUtf8(isolate, "require"), localRequire).ToChecked();
     context->SetEmbedderData((int)EmbedderDataIndex::ModulePath, filename);
     persistentContext.Reset(isolate, context);
 
     originalSource = readFileStr(path.c_str());
     std::tie(transpiledSource, jast) = transpileScript(isolateWrapper, originalSource);
     ast = importBabylonAst(jast);
+}
+
+void Module::analyze()
+{
+    resolveIdentifiers();
+
 }
 
 const AstRoot& Module::getAst()
@@ -68,6 +79,38 @@ v8::Local<v8::Module> Module::compileModuleFromSource(const string& filename, co
     return module;
 }
 
+void Module::resolveIdentifiers()
+{
+    using namespace v8;
+
+    if (identifierResolutionDone)
+        return;
+    identifierResolutionDone = true;
+
+    trace("Resolving identifiers for module "+path.string());
+    Isolate::Scope isolateScope(isolate);
+    HandleScope handleScope(isolate);
+    Local<Context> context = persistentContext.Get(isolate);
+    Context::Scope contextScope(context);
+    Local<v8::Module> module = getCompiledModule();
+
+    IdentifierResolutionResult result = resolveModuleIdentifiers(context, ast);
+    resolvedIdentifiers = result.resolvedIdentifiers;
+    missingGlobalIdentifiers = result.missingGlobalIdentifiers;
+
+    // Any missing identifier in one of our imports is also considered missing in our module,
+    // because imports are evaluated by v8 in the current module's context,
+    // so we need to have any missing global symbols of our imports in our own context.
+    for (int i=0; i<module->GetModuleRequestsLength(); ++i) {
+        auto importName = module->GetModuleRequest(i);
+        v8::String::Utf8Value importNameStr(isolate, importName);
+        if (NativeModule::hasModule(*importNameStr))
+            continue;
+        Module& importedModule = reinterpret_cast<Module&>(ModuleResolver::getModule(*this, *importNameStr, true));
+        missingGlobalIdentifiers.insert(missingGlobalIdentifiers.end(), importedModule.missingGlobalIdentifiers.begin(), importedModule.missingGlobalIdentifiers.end());
+    }
+}
+
 v8::Local<v8::Module> Module::getCompiledModule()
 {
     using namespace v8;
@@ -78,6 +121,7 @@ v8::Local<v8::Module> Module::getCompiledModule()
     if (compiledModule.IsEmpty()) {
         auto module = compileModuleFromSource(path, transpiledSource);
         compiledModule.Reset(isolate, module);
+        resolveIdentifiers();
     }
     return handleScope.Escape(compiledModule.Get(isolate));
 }
@@ -120,38 +164,20 @@ string Module::getPath() const
     return path;
 }
 
-void Module::reconstructTypes()
-{
-    cout << "Propagating type information for module " << path << endl;
-
-    /// TODO: (later, once imports work!) Traverse the AST completely, building an SSA representation as we go,
-    /// and linking each Identifier in the AST to its counterpart in the SSA code
-    /// After this we can start assigning and propagating types to the SSA variables.
-
-    json programAst = jast["program"];
-    walkAst(programAst, [](json& node) {
-        cout << node["type"];
-        return true;
-    });
-}
-
 void Module::resolveExports()
 {
     using namespace v8;
 
-    cout << "Resolving exports for module " << path << endl;
+    trace("Resolving exports for module "+path.string());
 
     Isolate::Scope isolateScope(isolate);
     HandleScope handleScope(isolate);
     TryCatch trycatch(isolate);
     Local<Context> context = persistentContext.Get(isolate);
     Context::Scope contextScope(context);
-
-    Local<String> filename = String::NewFromUtf8(isolate, path.c_str());
-    Local<v8::Function> localRequire = v8::Function::New(context, ModuleResolver::requireFunction, filename).ToLocalChecked();
-    context->Global()->Set(context, String::NewFromUtf8(isolate, "require"), localRequire).ToChecked();
-
     Local<v8::Module> module = getCompiledModule();
+    defineMissingGlobalIdentifiers(context, missingGlobalIdentifiers);
+
     if (auto maybeBool = module->InstantiateModule(context, ModuleResolver::resolveImportCallback); maybeBool.IsNothing() || !maybeBool.ToChecked()) {
         reportV8Exception(isolate, &trycatch);
         throw runtime_error("Failed to compile module");
@@ -162,6 +188,7 @@ void Module::resolveExports()
     if (module->GetStatus() == v8::Module::kErrored) {
         Local<v8::Object> except = module->GetException().As<Object>();
         v8::String::Utf8Value exceptStackStr(isolate, except->Get(String::NewFromUtf8(isolate, "stack")));
+
         throw std::runtime_error(std::string("Error when evaluating module '")+path.c_str()+"': "+*exceptStackStr);
     }
 }
@@ -179,12 +206,14 @@ bool Module::isES6Module()
             || node->getType() == AstNodeType::ExportAllDeclaration
             || node->getType() == AstNodeType::ExportDefaultDeclaration
             || node->getType() == AstNodeType::ExportNamedDeclaration
-            || node->getType() == AstNodeType::ExportSpecifier)
+            || node->getType() == AstNodeType::ExportSpecifier
+            || node->getType() == AstNodeType::ExportDefaultSpecifier)
             return true;
     }
     return false;
 }
 
+/// TODO: Remove this function, it's just not useful for anything now
 std::string Module::resolveImports(v8::Local<v8::Context>& context)
 {
     v8::Context::Scope contextScope(context);

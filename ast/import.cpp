@@ -607,7 +607,7 @@ AstNode* importVariableDeclarator(const json& node)
     if (auto jinit = node["init"]; jinit != nullptr)
         init = importNode(jinit);
     else
-        jinit = nullptr;
+        init = nullptr;
     return new VariableDeclarator(importNode(node["id"]), init);
 }
 
@@ -702,4 +702,9 @@ AstNode* importExportAllDeclaration(const json& node)
 AstNode* importExportSpecifier(const json& node)
 {
     return new ExportSpecifier(importNode(node["local"]), importNode(node["exported"]));
+}
+
+AstNode* importExportDefaultSpecifier(const json& node)
+{
+    return new ExportDefaultSpecifier(importNode(node["exported"]));
 }

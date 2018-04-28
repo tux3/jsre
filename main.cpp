@@ -24,8 +24,9 @@ int main(int argc, char* argv[])
     Module& mainModule = (Module&)ModuleResolver::getModule(isolateWrapper, "/", argv[1], true);
 
     v8::HandleScope handleScope(*isolateWrapper);
-    mainModule.getExports();
-    mainModule.reconstructTypes();
+    mainModule.analyze();
+    //mainModule.getCompiledModule();
+    //mainModule.getExports();
 
     return 0;
 }

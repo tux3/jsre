@@ -1,6 +1,8 @@
 #include "moduleresolver.hpp"
 #include "utils.hpp"
 #include "isolatewrapper.hpp"
+#include "reporting.hpp"
+#include "analyze/identresolution.hpp"
 #include <experimental/filesystem>
 #include <iostream>
 #include <json.hpp>
@@ -121,7 +123,7 @@ void ModuleResolver::requireFunction(const v8::FunctionCallbackInfo<v8::Value>& 
     v8::Local<v8::Value> arg = args[0];
     v8::String::Utf8Value requested(isolate, arg);
     v8::String::Utf8Value modulePath(isolate, args.Data());
-    cout << "require() from " << *modulePath << " for module \"" << *requested << "\"" << endl;
+    trace("require() from "s+*modulePath+" for module \""+*requested+"\"");
 
     Module& module = moduleMap.at(*modulePath);
     BasicModule* importedModule;
@@ -138,10 +140,10 @@ void ModuleResolver::requireFunction(const v8::FunctionCallbackInfo<v8::Value>& 
 //    auto context = isolate->GetCurrentContext();
 //    v8::Context::Scope contextScope(context);
 //    auto props = exports->GetOwnPropertyNames(context).ToLocalChecked();
-//    cout << "End of require for "<<*requested<<", found module at "<<importedModule->getPath()<<", got "<<props->Length()<<" properties"<<endl;
+//    trace("End of require for "s+*requested+", found module at "+importedModule->getPath()+", got "+props->Length()+" properties");
 //    for (uint32_t i=0; i<props->Length(); ++i) {
 //        auto nameStr = std::string(*v8::String::Utf8Value(isolate, props->Get(i).As<v8::String>()));
-//        cout <<nameStr<<endl;
+//        trace(nameStr);
 //    }
 
     v8::ReturnValue<v8::Value> returnValue = args.GetReturnValue();
@@ -155,12 +157,13 @@ v8::MaybeLocal<v8::Module> ModuleResolver::resolveImportCallback(v8::Local<v8::C
     v8::String::Utf8Value specifierStr(isolate, specifier);
     Module& referrerModule = compiledModuleMap.at(referrer->GetIdentityHash());
     string referrerPath = referrerModule.getPath();
-    cout << "import from " << referrerPath << " for module \"" << *specifierStr << "\"" << endl;
+    trace("import from "s+referrerPath+" for module \""+*specifierStr+"\"");
 
     if (NativeModule::hasModule(*specifierStr))
         return nativeModuleMap.try_emplace(*specifierStr, referrerModule.getIsolateWrapper(), *specifierStr).first->second.getWrapperModule();
 
     Module& importedModule = reinterpret_cast<Module&>(getModule(referrerModule, *specifierStr, true));
     v8::Local<v8::Module> importedCompiledModule = importedModule.getCompiledES6Module();
+
     return handleScope.Escape(importedCompiledModule);
 }
