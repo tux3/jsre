@@ -293,7 +293,7 @@ void Module::resolveProjectImports(std::filesystem::path projectDir)
         return;
     importsResolved = true;
 
-    //trace("Resolving imports of module "+path.string());
+    trace("Resolving imports of module "+path.string());
 
     Isolate::Scope isolateScope(isolate);
     HandleScope handleScope(isolate);

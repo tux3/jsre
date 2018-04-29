@@ -240,7 +240,7 @@ IdentifierResolutionResult resolveModuleIdentifiers(v8::Local<v8::Context> conte
     int fullScopeLevel = 0;
     vector<Scope> scopeDeclarations;
     unordered_map<Identifier*, Identifier*> identifierTargets;
-    unordered_set<string> unresolvedTopLevelIdentifiers;
+    unordered_map<string, Identifier*> unresolvedTopLevelIdentifiers;
 
     std::function<void(AstNode&)> walkScopes;
     walkScopes = [&](AstNode& node){
@@ -272,7 +272,7 @@ IdentifierResolutionResult resolveModuleIdentifiers(v8::Local<v8::Context> conte
                 found = true;
             }
             if (!found && fullScopeLevel == 1 && !isMemberPropertyOrQualifiedIdentifier(identifier))
-                unresolvedTopLevelIdentifiers.insert(name);
+                unresolvedTopLevelIdentifiers.insert({name, &identifier});
         }
 
         for (auto child : node.getChildren())
@@ -294,13 +294,14 @@ IdentifierResolutionResult resolveModuleIdentifiers(v8::Local<v8::Context> conte
     Context::Scope contextScope(context);
     Local<Object> global = context->Global();
     std::vector<std::string> missingGlobalIdentifiers;
-    for (auto name : unresolvedTopLevelIdentifiers) {
+    for (auto elem : unresolvedTopLevelIdentifiers) {
+        auto name = elem.first;
         Local<String> nameStr = String::NewFromUtf8(isolate, name.c_str());
 
         if (global->Has(nameStr))
             continue;
 
-        warn("Couldn't find declaration for top-level identifier "+name);
+        warn(*elem.second, "Couldn't find declaration for top-level identifier "+name);
         missingGlobalIdentifiers.push_back(std::move(name));
     }
 

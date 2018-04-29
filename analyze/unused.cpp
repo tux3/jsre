@@ -72,15 +72,14 @@ void findUnusedLocalDeclarations(Module &module)
         // There's no way to remove unused params in a function expression, so no warning, but it's convention to start their name with a '_'
         if (isFunctionalExpressionArgumentIdentifier(identifier)) {
             if (identifier.getName()[0] != '_')
-                suggest("Rename unused parameter "+identifier.getName()+" to _"+identifier.getName());
+                suggest(identifier, "Rename unused parameter "+identifier.getName()+" to _"+identifier.getName());
             continue;
         } else if (identifier.getParent()->getType() == AstNodeType::ImportSpecifier) {
-            warn("Unused import of "s+identifier.getName());
+            warn(identifier, "Unused import of "s+identifier.getName());
         } else if (isFunctionParameterIdentifier(identifier)) {
-            warn("Unused parameter "s+identifier.getName());
+            warn(identifier, "Unused parameter "s+identifier.getName());
         } else {
-            warn("Unused declaration of identifier "s+identifier.getName());
-            // TODO: Pass the AST node, and format the message like <file path>:74:49: warning: <msg>
+            warn(identifier, "Unused declaration of identifier "s+identifier.getName());
         }
     }
 }

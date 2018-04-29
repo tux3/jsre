@@ -43,6 +43,7 @@ class AstRoot : public AstNode {
 public:
     AstRoot(AstSourceSpan location, Module& parentModule, std::vector<AstNode*> body = {});
     const std::vector<AstNode*>& getBody();
+    Module& getParentModule();
     virtual std::vector<AstNode*> getChildren() override;
 
 private:

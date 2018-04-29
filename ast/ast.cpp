@@ -63,6 +63,11 @@ const std::vector<AstNode*>& AstRoot::getBody() {
     return body;
 }
 
+Module &AstRoot::getParentModule()
+{
+    return parentModule;
+}
+
 Identifier::Identifier(AstSourceSpan location, string name, TypeAnnotation* typeAnnotation, bool optional)
     : AstNode(location, AstNodeType::Identifier)
     , name{ name }
