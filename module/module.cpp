@@ -193,7 +193,7 @@ v8::Local<v8::Module> Module::getExecutableES6Module()
         return module;
 
     if (compiledThunkModule.IsEmpty()) {
-        Local<Context> context = isolate->GetCurrentContext();
+        Local<Context> context = persistentContext.Get(isolate);
         Context::Scope contextScope(context);
 
         auto thunkSource = "const _m=require('"s+path.c_str()+"');export default _m;\n";

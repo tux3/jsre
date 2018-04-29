@@ -167,10 +167,10 @@ void ModuleResolver::requireFunction(const v8::FunctionCallbackInfo<v8::Value>& 
 //    auto context = isolate->GetCurrentContext();
 //    v8::Context::Scope contextScope(context);
 //    auto props = exports->GetOwnPropertyNames(context).ToLocalChecked();
-//    trace("End of require for "s+*requested+", found module at "+importedModule->getPath()+", got "+props->Length()+" properties");
+//    trace("End of require for "s+*requested+" from "+*modulePath+", found module at "+importedModule->getPath()+", got "+to_string(props->Length())+" properties");
 //    for (uint32_t i=0; i<props->Length(); ++i) {
 //        auto nameStr = std::string(*v8::String::Utf8Value(isolate, props->Get(i).As<v8::String>()));
-//        trace(nameStr);
+//        trace("   "+nameStr);
 //    }
 
     v8::ReturnValue<v8::Value> returnValue = args.GetReturnValue();

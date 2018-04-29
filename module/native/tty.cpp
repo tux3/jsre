@@ -13,7 +13,6 @@ Local<Object> ttyModuleTemplate(IsolateWrapper& isolateWrapper)
 {
     Isolate* isolate = *isolateWrapper;
     EscapableHandleScope handleScope(isolate);
-    Local<Context> context = isolate->GetCurrentContext();
     Local<Object> compiledScript = compileNativeModuleScript(isolateWrapper, ttyModuleScript);
 
     Local<Object> exports = Object::New(isolate);

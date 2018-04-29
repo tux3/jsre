@@ -13,7 +13,6 @@ Local<Object> utilModuleTemplate(IsolateWrapper& isolateWrapper)
 {
     Isolate* isolate = *isolateWrapper;
     EscapableHandleScope handleScope(isolate);
-    Local<Context> context = isolate->GetCurrentContext();
     Local<Object> compiledScript = compileNativeModuleScript(isolateWrapper, utilModuleScript);
 
     Local<Object> exports = Object::New(isolate);

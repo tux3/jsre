@@ -9,7 +9,6 @@ Local<Object> fsModuleTemplate(IsolateWrapper& isolateWrapper)
 {
     Isolate* isolate = *isolateWrapper;
     EscapableHandleScope handleScope(isolate);
-    Local<Context> context = isolate->GetCurrentContext();
 
     Local<Object> exports = Object::New(isolate);
 
