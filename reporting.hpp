@@ -5,6 +5,9 @@
 
 class AstNode;
 
+// If left to false, trace messages will not be shown
+void setDebug(bool enable);
+
 void trace(const std::string& msg); //< Debug information.
 void trace(AstNode& node, const std::string& msg); //< Debug information.
 void suggest(const std::string& msg); //< Annoys you about minor or possible problems.

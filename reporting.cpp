@@ -6,6 +6,13 @@
 
 using namespace std;
 
+static bool debugEnabled = false;
+
+void setDebug(bool enable)
+{
+    debugEnabled = enable;
+}
+
 static void printLocation(AstNode& node)
 {
     Module& mod = node.getParentModule();
@@ -16,11 +23,15 @@ static void printLocation(AstNode& node)
 
 void trace(const string &msg)
 {
+    if (!debugEnabled)
+        return;
     cout << "debug: " << msg << endl;
 }
 
 void trace(AstNode &node, const string &msg)
 {
+    if (!debugEnabled)
+        return;
     printLocation(node);
     trace(msg);
 }
