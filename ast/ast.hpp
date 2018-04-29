@@ -2,6 +2,7 @@
 #define AST_HPP
 
 #include "import.hpp"
+#include "location.hpp"
 #include <string>
 #include <vector>
 
@@ -13,15 +14,20 @@ enum class AstNodeType {
 };
 #undef X
 
+#define X(IMPORTED_NODE_TYPE) class IMPORTED_NODE_TYPE;
+IMPORTED_NODE_LIST(X)
+#undef X
+
 class AstNode {
 public:
-    AstNode(AstNodeType type);
+    AstNode(AstSourceSpan location, AstNodeType type);
     AstNode(const AstNode& other) = delete;
     virtual ~AstNode() = default;
     AstNode* getParent();
     Module& getParentModule();
     AstNodeType getType();
     const char* getTypeName();
+    AstSourceSpan getLocation(); //< Location of the AST node. Don't forget this is UTF8, not bytes!
     virtual std::vector<AstNode*> getChildren();
 
 protected:
@@ -29,12 +35,13 @@ protected:
 
 private:
     AstNode* parent;
+    AstSourceSpan location;
     AstNodeType type;
 };
 
 class AstRoot : public AstNode {
 public:
-    AstRoot(Module& parentModule, std::vector<AstNode*> body = {});
+    AstRoot(AstSourceSpan location, Module& parentModule, std::vector<AstNode*> body = {});
     const std::vector<AstNode*>& getBody();
     virtual std::vector<AstNode*> getChildren() override;
 
@@ -45,16 +52,21 @@ private:
 
 class Identifier : public AstNode {
 public:
-    Identifier(std::string name);
+    Identifier(AstSourceSpan location, std::string name, TypeAnnotation* typeAnnotation, bool optional);
     const std::string& getName();
+    TypeAnnotation* getTypeAnnotation();
+    bool isOptional();
+    virtual std::vector<AstNode*> getChildren() override;
 
 private:
     std::string name;
+    TypeAnnotation* typeAnnotation;
+    bool optional; // Flow syntax, e.g. for optional parameters
 };
 
 class RegExpLiteral : public AstNode {
 public:
-    RegExpLiteral(std::string pattern, std::string flags);
+    RegExpLiteral(AstSourceSpan location, std::string pattern, std::string flags);
 
 private:
     std::string pattern, flags;
@@ -62,12 +74,12 @@ private:
 
 class NullLiteral : public AstNode {
 public:
-    NullLiteral();
+    NullLiteral(AstSourceSpan location);
 };
 
 class StringLiteral : public AstNode {
 public:
-    StringLiteral(std::string value);
+    StringLiteral(AstSourceSpan location, std::string value);
     const std::string& getValue();
 
 private:
@@ -76,7 +88,7 @@ private:
 
 class BooleanLiteral : public AstNode {
 public:
-    BooleanLiteral(bool value);
+    BooleanLiteral(AstSourceSpan location, bool value);
     bool getValue();
 
 private:
@@ -85,7 +97,7 @@ private:
 
 class NumericLiteral : public AstNode {
 public:
-    NumericLiteral(double value);
+    NumericLiteral(AstSourceSpan location, double value);
     double getValue();
 
 private:
@@ -94,7 +106,7 @@ private:
 
 class TemplateLiteral : public AstNode {
 public:
-    TemplateLiteral(std::vector<AstNode*> quasis, std::vector<AstNode*> expressions);
+    TemplateLiteral(AstSourceSpan location, std::vector<AstNode*> quasis, std::vector<AstNode*> expressions);
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
@@ -103,7 +115,7 @@ private:
 
 class TemplateElement : public AstNode {
 public:
-    TemplateElement(std::string rawValue, bool isTail);
+    TemplateElement(AstSourceSpan location, std::string rawValue, bool isTail);
 
 private:
     std::string rawValue;
@@ -112,7 +124,7 @@ private:
 
 class TaggedTemplateExpression : public AstNode {
 public:
-    TaggedTemplateExpression(AstNode* tag, AstNode* quasi);
+    TaggedTemplateExpression(AstSourceSpan location, AstNode* tag, AstNode* quasi);
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
@@ -122,7 +134,7 @@ private:
 
 class ExpressionStatement : public AstNode {
 public:
-    ExpressionStatement(AstNode* expression);
+    ExpressionStatement(AstSourceSpan location, AstNode* expression);
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
@@ -131,7 +143,7 @@ private:
 
 class BlockStatement : public AstNode {
 public:
-    BlockStatement(std::vector<AstNode*> body);
+    BlockStatement(AstSourceSpan location, std::vector<AstNode*> body);
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
@@ -140,12 +152,12 @@ private:
 
 class EmptyStatement : public AstNode {
 public:
-    EmptyStatement();
+    EmptyStatement(AstSourceSpan location);
 };
 
 class WithStatement : public AstNode {
 public:
-    WithStatement(AstNode* object, AstNode* body);
+    WithStatement(AstSourceSpan location, AstNode* object, AstNode* body);
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
@@ -154,12 +166,12 @@ private:
 
 class DebuggerStatement : public AstNode {
 public:
-    DebuggerStatement();
+    DebuggerStatement(AstSourceSpan location);
 };
 
 class ReturnStatement : public AstNode {
 public:
-    ReturnStatement(AstNode* argument);
+    ReturnStatement(AstSourceSpan location, AstNode* argument);
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
@@ -168,7 +180,7 @@ private:
 
 class LabeledStatement : public AstNode {
 public:
-    LabeledStatement(AstNode* label, AstNode* body);
+    LabeledStatement(AstSourceSpan location, AstNode* label, AstNode* body);
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
@@ -177,7 +189,7 @@ private:
 
 class BreakStatement : public AstNode {
 public:
-    BreakStatement(AstNode* label);
+    BreakStatement(AstSourceSpan location, AstNode* label);
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
@@ -186,7 +198,7 @@ private:
 
 class ContinueStatement : public AstNode {
 public:
-    ContinueStatement(AstNode* label);
+    ContinueStatement(AstSourceSpan location, AstNode* label);
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
@@ -195,7 +207,7 @@ private:
 
 class IfStatement : public AstNode {
 public:
-    IfStatement(AstNode* test, AstNode* consequent, AstNode* argument);
+    IfStatement(AstSourceSpan location, AstNode* test, AstNode* consequent, AstNode* argument);
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
@@ -204,7 +216,7 @@ private:
 
 class SwitchStatement : public AstNode {
 public:
-    SwitchStatement(AstNode* discriminant, std::vector<AstNode*> cases);
+    SwitchStatement(AstSourceSpan location, AstNode* discriminant, std::vector<AstNode*> cases);
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
@@ -214,7 +226,7 @@ private:
 
 class SwitchCase : public AstNode {
 public:
-    SwitchCase(AstNode* testOrDefault, std::vector<AstNode*> consequent);
+    SwitchCase(AstSourceSpan location, AstNode* testOrDefault, std::vector<AstNode*> consequent);
     const std::vector<AstNode*>& getConsequent();
     virtual std::vector<AstNode*> getChildren() override;
 
@@ -225,7 +237,7 @@ private:
 
 class ThrowStatement : public AstNode {
 public:
-    ThrowStatement(AstNode* argument);
+    ThrowStatement(AstSourceSpan location, AstNode* argument);
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
@@ -234,7 +246,7 @@ private:
 
 class TryStatement : public AstNode {
 public:
-    TryStatement(AstNode* body, AstNode* handler, AstNode* finalizer);
+    TryStatement(AstSourceSpan location, AstNode* body, AstNode* handler, AstNode* finalizer);
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
@@ -243,7 +255,7 @@ private:
 
 class CatchClause : public AstNode {
 public:
-    CatchClause(AstNode* param, AstNode* body);
+    CatchClause(AstSourceSpan location, AstNode* param, AstNode* body);
     AstNode* getParam();
     AstNode* getBody();
     virtual std::vector<AstNode*> getChildren() override;
@@ -254,7 +266,7 @@ private:
 
 class WhileStatement : public AstNode {
 public:
-    WhileStatement(AstNode* test, AstNode* body);
+    WhileStatement(AstSourceSpan location, AstNode* test, AstNode* body);
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
@@ -263,7 +275,7 @@ private:
 
 class DoWhileStatement : public AstNode {
 public:
-    DoWhileStatement(AstNode* test, AstNode* body);
+    DoWhileStatement(AstSourceSpan location, AstNode* test, AstNode* body);
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
@@ -277,7 +289,8 @@ public:
     const std::vector<Identifier*>& getParams();
 
 protected:
-    Function(AstNodeType type, AstNode* id, std::vector<AstNode*> params, AstNode* body, bool generator, bool async);
+    Function(AstSourceSpan location, AstNodeType type, AstNode* id, std::vector<AstNode*> params, AstNode* body,
+             TypeParameterDeclaration* typeParameters, TypeAnnotation* returnType, bool generator, bool async);
     bool isGenerator();
     bool isAsync();
     virtual std::vector<AstNode*> getChildren() override;
@@ -286,12 +299,14 @@ protected:
     AstNode* id;
     std::vector<AstNode*> params;
     AstNode* body;
+    TypeParameterDeclaration* typeParameters;
+    TypeAnnotation* returnType;
     bool generator, async;
 };
 
 class ObjectProperty : public AstNode {
 public:
-    ObjectProperty(AstNode* key, AstNode* value, bool isShorthand, bool isComputed);
+    ObjectProperty(AstSourceSpan location, AstNode* key, AstNode* value, bool isShorthand, bool isComputed);
     Identifier* getKey();
     virtual std::vector<AstNode*> getChildren() override;
 
@@ -309,8 +324,8 @@ public:
         Set,
     };
 
-    ObjectMethod(AstNode* id, std::vector<AstNode*> params, AstNode* body, AstNode* key, Kind kind,
-        bool isGenerator, bool isAsync, bool isComputed);
+    ObjectMethod(AstSourceSpan location, AstNode* id, std::vector<AstNode*> params, AstNode* body, TypeParameterDeclaration* typeParameters,
+                 TypeAnnotation* returnType, AstNode* key, Kind kind, bool isGenerator, bool isAsync, bool isComputed);
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
@@ -321,22 +336,23 @@ private:
 
 class Super : public AstNode {
 public:
-    Super();
+    Super(AstSourceSpan location);
 };
 
 class Import : public AstNode {
 public:
-    Import();
+    Import(AstSourceSpan location);
 };
 
 class ThisExpression : public AstNode {
 public:
-    ThisExpression();
+    ThisExpression(AstSourceSpan location);
 };
 
 class ArrowFunctionExpression : public Function {
 public:
-    ArrowFunctionExpression(AstNode* id, std::vector<AstNode*> params, AstNode* body, bool isGenerator, bool isAsync, bool isExpression);
+    ArrowFunctionExpression(AstSourceSpan location, AstNode* id, std::vector<AstNode*> params, AstNode* body, TypeParameterDeclaration* typeParameters,
+                            TypeAnnotation* returnType, bool isGenerator, bool isAsync, bool isExpression);
 
 private:
     bool isExpression;
@@ -344,7 +360,7 @@ private:
 
 class YieldExpression : public AstNode {
 public:
-    YieldExpression(AstNode* argument, bool isDelegate);
+    YieldExpression(AstSourceSpan location, AstNode* argument, bool isDelegate);
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
@@ -354,7 +370,7 @@ private:
 
 class AwaitExpression : public AstNode {
 public:
-    AwaitExpression(AstNode* argument);
+    AwaitExpression(AstSourceSpan location, AstNode* argument);
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
@@ -363,7 +379,7 @@ private:
 
 class ArrayExpression : public AstNode {
 public:
-    ArrayExpression(std::vector<AstNode*> elements);
+    ArrayExpression(AstSourceSpan location, std::vector<AstNode*> elements);
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
@@ -372,7 +388,7 @@ private:
 
 class ObjectExpression : public AstNode {
 public:
-    ObjectExpression(std::vector<AstNode*> properties);
+    ObjectExpression(AstSourceSpan location, std::vector<AstNode*> properties);
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
@@ -381,7 +397,8 @@ private:
 
 class FunctionExpression : public Function {
 public:
-    FunctionExpression(AstNode* id, std::vector<AstNode*> params, AstNode* body, bool isGenerator, bool isAsync);
+    FunctionExpression(AstSourceSpan location, AstNode* id, std::vector<AstNode*> params, AstNode* body,
+                       TypeParameterDeclaration* typeParameters, TypeAnnotation* returnType, bool isGenerator, bool isAsync);
 };
 
 class UnaryExpression : public AstNode {
@@ -396,7 +413,7 @@ public:
         Delete,
         Throw,
     };
-    UnaryExpression(AstNode* argument, Operator unaryOperator, bool isPrefix);
+    UnaryExpression(AstSourceSpan location, AstNode* argument, Operator unaryOperator, bool isPrefix);
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
@@ -411,7 +428,7 @@ public:
         Increment,
         Decrement,
     };
-    UpdateExpression(AstNode* argument, Operator updateOperator, bool isPrefix);
+    UpdateExpression(AstSourceSpan location, AstNode* argument, Operator updateOperator, bool isPrefix);
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
@@ -445,7 +462,7 @@ public:
         In,
         Instanceof,
     };
-    BinaryExpression(AstNode* left, AstNode* right, Operator binaryOperator);
+    BinaryExpression(AstSourceSpan location, AstNode* left, AstNode* right, Operator binaryOperator);
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
@@ -469,7 +486,7 @@ public:
         XorEqual,
         AndEqual,
     };
-    AssignmentExpression(AstNode* left, AstNode* right, Operator assignmentOperator);
+    AssignmentExpression(AstSourceSpan location, AstNode* left, AstNode* right, Operator assignmentOperator);
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
@@ -483,7 +500,7 @@ public:
         Or,
         And,
     };
-    LogicalExpression(AstNode* left, AstNode* right, Operator logicalOperator);
+    LogicalExpression(AstSourceSpan location, AstNode* left, AstNode* right, Operator logicalOperator);
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
@@ -493,7 +510,7 @@ private:
 
 class MemberExpression : public AstNode {
 public:
-    MemberExpression(AstNode* object, AstNode* property, bool isComputed);
+    MemberExpression(AstSourceSpan location, AstNode* object, AstNode* property, bool isComputed);
     Identifier* getProperty();
     virtual std::vector<AstNode*> getChildren() override;
 
@@ -504,7 +521,7 @@ private:
 
 class BindExpression : public AstNode {
 public:
-    BindExpression(AstNode* object, AstNode* callee);
+    BindExpression(AstSourceSpan location, AstNode* object, AstNode* callee);
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
@@ -513,7 +530,7 @@ private:
 
 class ConditionalExpression : public AstNode {
 public:
-    ConditionalExpression(AstNode* test, AstNode* alternate, AstNode* consequent);
+    ConditionalExpression(AstSourceSpan location, AstNode* test, AstNode* alternate, AstNode* consequent);
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
@@ -522,12 +539,12 @@ private:
 
 class CallExpression : public AstNode {
 public:
-    CallExpression(AstNode* callee, std::vector<AstNode*> arguments);
+    CallExpression(AstSourceSpan location, AstNode* callee, std::vector<AstNode*> arguments);
     const std::vector<AstNode*>& getArguments();
     virtual std::vector<AstNode*> getChildren() override;
 
 protected:
-    CallExpression(AstNodeType type, AstNode* callee, std::vector<AstNode*> arguments);
+    CallExpression(AstSourceSpan location, AstNodeType type, AstNode* callee, std::vector<AstNode*> arguments);
 
 private:
     AstNode* callee;
@@ -536,12 +553,12 @@ private:
 
 class NewExpression : public CallExpression {
 public:
-    NewExpression(AstNode* callee, std::vector<AstNode*> arguments);
+    NewExpression(AstSourceSpan location, AstNode* callee, std::vector<AstNode*> arguments);
 };
 
 class SequenceExpression : public AstNode {
 public:
-    SequenceExpression(std::vector<AstNode*> expressions);
+    SequenceExpression(AstSourceSpan location, std::vector<AstNode*> expressions);
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
@@ -550,7 +567,7 @@ private:
 
 class DoExpression : public AstNode {
 public:
-    DoExpression(AstNode* body);
+    DoExpression(AstSourceSpan location, AstNode* body);
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
@@ -560,29 +577,31 @@ private:
 class Class : public AstNode {
 public:
     Identifier* getId();
+    const std::vector<ClassImplements*>& getImplements();
 
 protected:
-    Class(AstNodeType type, AstNode* id, AstNode* superClass, AstNode* body);
+    Class(AstSourceSpan location, AstNodeType type, AstNode* id, AstNode* superClass, AstNode* body, std::vector<ClassImplements*> implements);
     virtual std::vector<AstNode*> getChildren() override;
 
 protected:
     AstNode *id, *superClass;
     AstNode* body;
+    std::vector<ClassImplements*> implements;
 };
 
 class ClassExpression : public Class {
 public:
-    ClassExpression(AstNode* id, AstNode* superClass, AstNode* body);
+    ClassExpression(AstSourceSpan location, AstNode* id, AstNode* superClass, AstNode* body, std::vector<ClassImplements*> implements);
 };
 
 class ClassDeclaration : public Class {
 public:
-    ClassDeclaration(AstNode* id, AstNode* superClass, AstNode* body);
+    ClassDeclaration(AstSourceSpan location, AstNode* id, AstNode* superClass, AstNode* body, std::vector<ClassImplements*> implements);
 };
 
 class ClassBody : public AstNode {
 public:
-    ClassBody(std::vector<AstNode*> body);
+    ClassBody(AstSourceSpan location, std::vector<AstNode*> body);
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
@@ -591,23 +610,25 @@ private:
 
 class ClassProperty : public AstNode {
 public:
-    ClassProperty(AstNode* key, AstNode* value, bool isStatic, bool isComputed);
+    ClassProperty(AstSourceSpan location, AstNode* key, AstNode* value, TypeAnnotation* typeAnnotation, bool isStatic, bool isComputed);
     Identifier* getKey();
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
     AstNode *key, *value;
+    TypeAnnotation* typeAnnotation;
     bool isStatic, isComputed;
 };
 
 class ClassPrivateProperty : public AstNode {
 public:
-    ClassPrivateProperty(AstNode* key, AstNode* value, bool isStatic);
+    ClassPrivateProperty(AstSourceSpan location, AstNode* key, AstNode* value, TypeAnnotation* typeAnnotation, bool isStatic);
     Identifier* getKey();
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
     AstNode *key, *value;
+    TypeAnnotation* typeAnnotation;
     bool isStatic;
 };
 
@@ -620,8 +641,9 @@ public:
         Set,
     };
 
-    ClassMethod(AstNode* id, std::vector<AstNode*> params, AstNode* body, AstNode* key, Kind kind,
-        bool isGenerator, bool isAsync, bool isComputed, bool isStatic);
+    ClassMethod(AstSourceSpan location, AstNode* id, std::vector<AstNode*> params, AstNode* body, AstNode* key,
+                TypeParameterDeclaration* typeParameters, TypeAnnotation* returnType,
+                Kind kind, bool isGenerator, bool isAsync, bool isComputed, bool isStatic);
     Identifier* getKey();
     virtual std::vector<AstNode*> getChildren() override;
 
@@ -639,8 +661,9 @@ public:
         Set,
     };
 
-    ClassPrivateMethod(AstNode* id, std::vector<AstNode*> params, AstNode* body, AstNode* key, Kind kind,
-        bool isGenerator, bool isAsync, bool isStatic);
+    ClassPrivateMethod(AstSourceSpan location, AstNode* id, std::vector<AstNode*> params, AstNode* body, AstNode* key,
+                       TypeParameterDeclaration* typeParameters, TypeAnnotation* returnType,
+                       Kind kind, bool isGenerator, bool isAsync, bool isStatic);
     Identifier* getKey();
     virtual std::vector<AstNode*> getChildren() override;
 
@@ -652,7 +675,8 @@ private:
 
 class FunctionDeclaration : public Function {
 public:
-    FunctionDeclaration(AstNode* id, std::vector<AstNode*> params, AstNode* body, bool isGenerator, bool isAsync);
+    FunctionDeclaration(AstSourceSpan location, AstNode* id, std::vector<AstNode*> params, AstNode* body,
+                        TypeParameterDeclaration* typeParameters, TypeAnnotation* returnType, bool isGenerator, bool isAsync);
 };
 
 class VariableDeclaration : public AstNode {
@@ -662,7 +686,7 @@ public:
         Let,
         Const
     };
-    VariableDeclaration(std::vector<AstNode*> declarators, Kind kind);
+    VariableDeclaration(AstSourceSpan location, std::vector<AstNode*> declarators, Kind kind);
     Kind getKind();
     const std::vector<AstNode*>& getDeclarators();
     virtual std::vector<AstNode*> getChildren() override;
@@ -674,7 +698,7 @@ private:
 
 class VariableDeclarator : public AstNode {
 public:
-    VariableDeclarator(AstNode* id, AstNode* init);
+    VariableDeclarator(AstSourceSpan location, AstNode* id, AstNode* init);
     AstNode* getId();
     virtual std::vector<AstNode*> getChildren() override;
 
@@ -684,7 +708,7 @@ private:
 
 class ForStatement : public AstNode {
 public:
-    ForStatement(AstNode* init, AstNode* test, AstNode* update, AstNode* body);
+    ForStatement(AstSourceSpan location, AstNode* init, AstNode* test, AstNode* update, AstNode* body);
     VariableDeclaration* getInit();
     virtual std::vector<AstNode*> getChildren() override;
 
@@ -694,7 +718,7 @@ private:
 
 class ForInStatement : public AstNode {
 public:
-    ForInStatement(AstNode* left, AstNode* right, AstNode* body);
+    ForInStatement(AstSourceSpan location, AstNode* left, AstNode* right, AstNode* body);
     AstNode* getLeft();
     virtual std::vector<AstNode*> getChildren() override;
 
@@ -704,7 +728,7 @@ private:
 
 class ForOfStatement : public AstNode {
 public:
-    ForOfStatement(AstNode* left, AstNode* right, AstNode* body, bool isAwait);
+    ForOfStatement(AstSourceSpan location, AstNode* left, AstNode* right, AstNode* body, bool isAwait);
     AstNode* getLeft();
     virtual std::vector<AstNode*> getChildren() override;
 
@@ -715,7 +739,7 @@ private:
 
 class SpreadElement : public AstNode {
 public:
-    SpreadElement(AstNode* argument);
+    SpreadElement(AstSourceSpan location, AstNode* argument);
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
@@ -724,17 +748,18 @@ private:
 
 class ObjectPattern : public AstNode {
 public:
-    ObjectPattern(std::vector<AstNode*> properties);
+    ObjectPattern(AstSourceSpan location, std::vector<AstNode*> properties, TypeAnnotation* typeAnnotation);
     const std::vector<ObjectProperty*>& getProperties();
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
     std::vector<AstNode*> properties;
+    TypeAnnotation* typeAnnotation;
 };
 
 class ArrayPattern : public AstNode {
 public:
-    ArrayPattern(std::vector<AstNode*> elements);
+    ArrayPattern(AstSourceSpan location, std::vector<AstNode*> elements);
     const std::vector<AstNode*>& getElements();
     virtual std::vector<AstNode*> getChildren() override;
 
@@ -744,7 +769,7 @@ private:
 
 class AssignmentPattern : public AstNode {
 public:
-    AssignmentPattern(AstNode* left, AstNode* right);
+    AssignmentPattern(AstSourceSpan location, AstNode* left, AstNode* right);
     Identifier* getLeft();
     AstNode* getRight();
     virtual std::vector<AstNode*> getChildren() override;
@@ -755,17 +780,18 @@ private:
 
 class RestElement : public AstNode {
 public:
-    RestElement(AstNode* argument);
+    RestElement(AstSourceSpan location, AstNode* argument, TypeAnnotation* typeAnnotation);
     Identifier* getArgument();
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
     AstNode* argument;
+    TypeAnnotation* typeAnnotation;
 };
 
 class MetaProperty : public AstNode {
 public:
-    MetaProperty(AstNode* meta, AstNode* property);
+    MetaProperty(AstSourceSpan location, AstNode* meta, AstNode* property);
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
@@ -774,31 +800,41 @@ private:
 
 class ImportDeclaration : public AstNode {
 public:
-    ImportDeclaration(std::vector<AstNode*> specifiers, AstNode* source);
+    enum class Kind {
+        Value,
+        Type,
+    };
+
+public:
+    ImportDeclaration(AstSourceSpan location, std::vector<AstNode*> specifiers, AstNode* source, Kind kind);
     std::string getSource();
+    Kind getKind();
     const std::vector<AstNode*>& getSpecifiers();
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
     std::vector<AstNode*> specifiers;
     AstNode* source;
+    Kind kind;
 };
 
 class ImportSpecifier : public AstNode {
 public:
-    ImportSpecifier(AstNode* local, AstNode* imported);
+    ImportSpecifier(AstSourceSpan location, AstNode* local, AstNode* imported, bool typeImport);
     Identifier* getLocal();
     Identifier* getImported();
+    bool isTypeImport();
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
     Identifier *local, *imported;
     bool localEqualsImported;
+    bool typeImport;
 };
 
 class ImportDefaultSpecifier : public AstNode {
 public:
-    ImportDefaultSpecifier(AstNode* local);
+    ImportDefaultSpecifier(AstSourceSpan location, AstNode* local);
     Identifier* getLocal();
     virtual std::vector<AstNode*> getChildren() override;
 
@@ -808,7 +844,7 @@ private:
 
 class ImportNamespaceSpecifier : public AstNode {
 public:
-    ImportNamespaceSpecifier(AstNode* local);
+    ImportNamespaceSpecifier(AstSourceSpan location, AstNode* local);
     Identifier* getLocal();
     virtual std::vector<AstNode*> getChildren() override;
 
@@ -818,17 +854,25 @@ private:
 
 class ExportNamedDeclaration : public AstNode {
 public:
-    ExportNamedDeclaration(AstNode* declaration, AstNode* source, std::vector<AstNode*> specifiers);
+    enum class Kind {
+        Value,
+        Type,
+    };
+
+public:
+    ExportNamedDeclaration(AstSourceSpan location, AstNode* declaration, AstNode* source, std::vector<AstNode*> specifiers, Kind kind);
+    Kind getKind();
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
     AstNode *declaration, *source;
     std::vector<AstNode*> specifiers;
+    Kind kind;
 };
 
 class ExportDefaultDeclaration : public AstNode {
 public:
-    ExportDefaultDeclaration(AstNode* declaration);
+    ExportDefaultDeclaration(AstSourceSpan location, AstNode* declaration);
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
@@ -837,7 +881,7 @@ private:
 
 class ExportAllDeclaration : public AstNode {
 public:
-    ExportAllDeclaration(AstNode* source);
+    ExportAllDeclaration(AstSourceSpan location, AstNode* source);
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
@@ -846,7 +890,7 @@ private:
 
 class ExportSpecifier : public AstNode {
 public:
-    ExportSpecifier(AstNode* local, AstNode* exported);
+    ExportSpecifier(AstSourceSpan location, AstNode* local, AstNode* exported);
     Identifier* getLocal();
     Identifier* getExported();
     virtual std::vector<AstNode*> getChildren() override;
@@ -857,12 +901,295 @@ private:
 
 class ExportDefaultSpecifier : public AstNode {
 public:
-    ExportDefaultSpecifier(AstNode* exported);
+    ExportDefaultSpecifier(AstSourceSpan location, AstNode* exported);
     Identifier* getExported();
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
     AstNode *exported;
+};
+
+class TypeAnnotation : public AstNode {
+public:
+    TypeAnnotation(AstSourceSpan location, AstNode* typeAnnotation);
+    Identifier* getTypeAnnotation();
+    virtual std::vector<AstNode*> getChildren() override;
+
+private:
+    AstNode *typeAnnotation;
+};
+
+class GenericTypeAnnotation : public AstNode {
+public:
+    GenericTypeAnnotation(AstSourceSpan location, AstNode* id, AstNode* typeParameters);
+    Identifier* getId();
+    Identifier* getTypeParameters();
+    virtual std::vector<AstNode*> getChildren() override;
+
+private:
+    AstNode *id;
+    AstNode *typeParameters;
+};
+
+class StringTypeAnnotation : public AstNode {
+public:
+    StringTypeAnnotation(AstSourceSpan location);
+};
+
+class NumberTypeAnnotation : public AstNode {
+public:
+    NumberTypeAnnotation(AstSourceSpan location);
+};
+
+class BooleanTypeAnnotation : public AstNode {
+public:
+    BooleanTypeAnnotation(AstSourceSpan location);
+};
+
+class VoidTypeAnnotation : public AstNode {
+public:
+    VoidTypeAnnotation(AstSourceSpan location);
+};
+
+class AnyTypeAnnotation : public AstNode {
+public:
+    AnyTypeAnnotation(AstSourceSpan location);
+};
+
+class ExistsTypeAnnotation : public AstNode {
+public:
+    ExistsTypeAnnotation(AstSourceSpan location);
+};
+
+class MixedTypeAnnotation : public AstNode {
+public:
+    MixedTypeAnnotation(AstSourceSpan location);
+};
+
+class NullableTypeAnnotation : public AstNode {
+public:
+    NullableTypeAnnotation(AstSourceSpan location, AstNode* typeAnnotation);
+    virtual std::vector<AstNode*> getChildren() override;
+
+private:
+    AstNode* typeAnnotation;
+};
+
+class TupleTypeAnnotation : public AstNode {
+public:
+    TupleTypeAnnotation(AstSourceSpan location, std::vector<AstNode*> types);
+    virtual std::vector<AstNode*> getChildren() override;
+
+private:
+    std::vector<AstNode*> types;
+};
+
+class UnionTypeAnnotation : public AstNode {
+public:
+    UnionTypeAnnotation(AstSourceSpan location, std::vector<AstNode*> types);
+    virtual std::vector<AstNode*> getChildren() override;
+
+private:
+    std::vector<AstNode*> types;
+};
+
+class NullLiteralTypeAnnotation : public AstNode {
+public:
+    NullLiteralTypeAnnotation(AstSourceSpan location);
+};
+
+class NumberLiteralTypeAnnotation : public AstNode {
+public:
+    NumberLiteralTypeAnnotation(AstSourceSpan location, double value);
+
+private:
+    double value;
+};
+
+class StringLiteralTypeAnnotation : public AstNode {
+public:
+    StringLiteralTypeAnnotation(AstSourceSpan location, std::string value);
+
+private:
+    std::string value;
+};
+
+class BooleanLiteralTypeAnnotation : public AstNode {
+public:
+    BooleanLiteralTypeAnnotation(AstSourceSpan location, bool value);
+
+private:
+    bool value;
+};
+
+class TypeofTypeAnnotation : public AstNode {
+public:
+    TypeofTypeAnnotation(AstSourceSpan location, AstNode* argument);
+    virtual std::vector<AstNode*> getChildren() override;
+
+private:
+    AstNode* argument;
+};
+
+class FunctionTypeAnnotation : public AstNode {
+public:
+    FunctionTypeAnnotation(AstSourceSpan location, std::vector<FunctionTypeParam*> params, FunctionTypeParam* rest, AstNode* returnType);
+    virtual std::vector<AstNode*> getChildren() override;
+
+private:
+    std::vector<FunctionTypeParam*> params;
+    FunctionTypeParam* rest;
+    AstNode* returnType;
+};
+
+class FunctionTypeParam : public AstNode {
+public:
+    FunctionTypeParam(AstSourceSpan location, Identifier* name, AstNode* typeAnnotation);
+    Identifier* getName();
+    virtual std::vector<AstNode*> getChildren() override;
+
+private:
+    Identifier* name;
+    AstNode* typeAnnotation;
+};
+
+class ObjectTypeAnnotation : public AstNode {
+public:
+    ObjectTypeAnnotation(AstSourceSpan location, std::vector<ObjectTypeProperty*> properties, std::vector<ObjectTypeIndexer*> indexers, bool exact);
+    virtual std::vector<AstNode*> getChildren() override;
+
+private:
+    std::vector<ObjectTypeProperty*> properties;
+    std::vector<ObjectTypeIndexer*> indexers;
+    bool exact;
+};
+
+class ObjectTypeProperty : public AstNode {
+public:
+    ObjectTypeProperty(AstSourceSpan location, Identifier* key, AstNode* value, bool optional);
+    Identifier* getKey();
+    AstNode* getValue();
+    bool isOptional();
+    virtual std::vector<AstNode*> getChildren() override;
+
+private:
+    Identifier *key;
+    AstNode *value;
+    bool optional;
+};
+
+class ObjectTypeIndexer : public AstNode {
+public:
+    ObjectTypeIndexer(AstSourceSpan location, Identifier* id, AstNode* key, AstNode* value);
+    Identifier* getId();
+    AstNode* getKey();
+    AstNode* getValue();
+    virtual std::vector<AstNode*> getChildren() override;
+
+private:
+    Identifier *id;
+    AstNode *key;
+    AstNode *value;
+};
+
+class TypeAlias : public AstNode {
+public:
+    TypeAlias(AstSourceSpan location, Identifier* id, AstNode* typeParameters, AstNode* right);
+    Identifier* getId();
+    AstNode* getTypeParameters();
+    AstNode* getRight();
+    virtual std::vector<AstNode*> getChildren() override;
+
+private:
+    Identifier *id;
+    AstNode *typeParameters;
+    AstNode *right;
+};
+
+class TypeParameterInstantiation : public AstNode {
+public:
+    TypeParameterInstantiation(AstSourceSpan location, std::vector<AstNode*> params);
+    virtual std::vector<AstNode*> getChildren() override;
+
+private:
+    std::vector<AstNode*> params;
+};
+
+class TypeParameterDeclaration : public AstNode {
+public:
+    TypeParameterDeclaration(AstSourceSpan location, std::vector<AstNode*> params);
+    const std::vector<TypeParameter*>& getParams();
+    virtual std::vector<AstNode*> getChildren() override;
+
+private:
+    std::vector<AstNode*> params;
+};
+
+class TypeParameter : public AstNode {
+public:
+    TypeParameter(AstSourceSpan location, std::string name);
+    Identifier* getName();
+    virtual std::vector<AstNode*> getChildren() override;
+
+private:
+    Identifier* name; // We pretend our name is an identifier for consistency
+};
+
+class TypeCastExpression : public AstNode {
+public:
+    TypeCastExpression(AstSourceSpan location, AstNode* expression, TypeAnnotation* typeAnnotation);
+    virtual std::vector<AstNode*> getChildren() override;
+
+private:
+    AstNode* expression;
+    TypeAnnotation* typeAnnotation;
+};
+
+class ClassImplements : public AstNode {
+public:
+    ClassImplements(AstSourceSpan location, Identifier* id, TypeParameterInstantiation* typeParameters);
+    virtual std::vector<AstNode*> getChildren() override;
+
+private:
+    Identifier* id;
+    TypeParameterInstantiation* typeParameters;
+};
+
+class QualifiedTypeIdentifier : public AstNode {
+public:
+    QualifiedTypeIdentifier(AstSourceSpan location, Identifier* qualification, Identifier* id);
+    virtual std::vector<AstNode*> getChildren() override;
+    Identifier *getId();
+    Identifier *getQualification();
+
+private:
+    Identifier* qualification;
+    Identifier* id;
+};
+
+class InterfaceDeclaration : public AstNode {
+public:
+    InterfaceDeclaration(AstSourceSpan location, Identifier* id, TypeParameterDeclaration* typeParameters, AstNode* body,
+                         std::vector<InterfaceExtends*> extends, std::vector<InterfaceExtends*> mixins);
+    Identifier* getId();
+    virtual std::vector<AstNode*> getChildren() override;
+
+private:
+    Identifier* id;
+    TypeParameterDeclaration* typeParameters;
+    AstNode* body;
+    std::vector<InterfaceExtends*> extends;
+    std::vector<InterfaceExtends*> mixins;
+};
+
+class InterfaceExtends : public AstNode {
+public:
+    InterfaceExtends(AstSourceSpan location, Identifier* id, TypeParameterInstantiation* typeParameters);
+    virtual std::vector<AstNode*> getChildren() override;
+
+private:
+    Identifier* id;
+    TypeParameterInstantiation* typeParameters;
 };
 
 #endif // AST_HPP

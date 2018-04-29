@@ -16,7 +16,7 @@ public:
     static bool hasModule(const std::string &name);
 
 private:
-    virtual void resolveExports() override;
+    virtual void evaluate() override;
     std::string name;
     NativeModuleTemplate moduleTemplate;
 };

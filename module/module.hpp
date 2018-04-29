@@ -39,7 +39,7 @@ private:
     void resolveLocalIdentifiers();
     void resolveLocalXRefs();
     void resolveImportedIdentifiers();
-    virtual void resolveExports() override;
+    virtual void evaluate() override;
     bool isES6Module();
     void compileModule();
 

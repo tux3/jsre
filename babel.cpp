@@ -36,11 +36,12 @@ Local<Function> getBabelParseFunction(IsolateWrapper& isolateWrapper)
     }
 
     Local<Object> babelObj = persistentBabelObj.Get(isolate);
-    Local<String> transformFunctionName = String::NewFromUtf8(isolate, "transform");
+    Local<String> transformFunctionName = String::NewFromUtf8(isolate, "parse");
     return babelObj->Get(context, transformFunctionName).ToLocalChecked().As<Function>();
 }
 
-std::pair<std::string, nlohmann::json> transpileScript(IsolateWrapper& isolateWrapper, const std::string& scriptSource)
+//std::pair<std::string, nlohmann::json> transpileScript(IsolateWrapper& isolateWrapper, const std::string& scriptSource)
+nlohmann::json transpileScript(IsolateWrapper& isolateWrapper, const std::string& scriptSource)
 {
     Isolate* isolate = isolateWrapper.get();
     Isolate::Scope isolateScope(isolate);
@@ -55,7 +56,14 @@ std::pair<std::string, nlohmann::json> transpileScript(IsolateWrapper& isolateWr
     Local<Value> transformOptions;
     if (!JSON::Parse(context, String::NewFromUtf8(isolate, R"({
         "sourceMaps": "false",
-        "plugins": ["transform-flow-strip-types"],
+        "plugins" : [
+          "objectRestSpread",
+          "classProperties",
+          "exportExtensions",
+          "asyncGenerators",
+          "flow"
+        ],
+        "sourceType": "module",
         "parserOpts": {
             "plugins" : [
                 "objectRestSpread",
@@ -83,5 +91,6 @@ std::pair<std::string, nlohmann::json> transpileScript(IsolateWrapper& isolateWr
     Local<String> jsonStr = JSON::Stringify(context, result.As<Object>()).ToLocalChecked();
     String::Utf8Value jsonStrUtf8(jsonStr);
     json json = json::parse(*jsonStrUtf8, *jsonStrUtf8 + jsonStrUtf8.length());
-    return { json["code"].get<std::string>(), json["ast"] };
+    //return { json["code"].get<std::string>(), json["ast"] };
+    return json;
 }

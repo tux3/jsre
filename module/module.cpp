@@ -4,6 +4,7 @@
 #include "ast/ast.hpp"
 #include "analyze/identresolution.hpp"
 #include "analyze/unused.hpp"
+#include "transform/flow.hpp"
 #include "babel.hpp"
 #include "global.hpp"
 #include "moduleresolver.hpp"
@@ -32,8 +33,10 @@ Module::Module(IsolateWrapper& isolateWrapper, fs::path path)
     persistentContext.Reset(isolate, context);
 
     originalSource = readFileStr(path.c_str());
-    std::tie(transpiledSource, jast) = transpileScript(isolateWrapper, originalSource);
+    //std::tie(transpiledSource, jast) = transpileScript(isolateWrapper, originalSource);
+    jast = transpileScript(isolateWrapper, originalSource);
     ast = importBabylonAst(*this, jast);
+    transpiledSource = stripFlowTypes(originalSource, *ast);
 }
 
 const AstRoot& Module::getAst()
@@ -233,11 +236,11 @@ std::unordered_map<Identifier *, Identifier *> Module::getResolvedLocalIdentifie
     return resolvedLocalIdentifiers;
 }
 
-void Module::resolveExports()
+void Module::evaluate()
 {
     using namespace v8;
 
-    trace("Resolving exports for module "+path.string());
+    trace("Evaluating module "+path.string());
 
     Isolate::Scope isolateScope(isolate);
     HandleScope handleScope(isolate);
@@ -290,7 +293,7 @@ void Module::resolveProjectImports(std::filesystem::path projectDir)
         return;
     importsResolved = true;
 
-    trace("Resolving imports of module "+path.string());
+    //trace("Resolving imports of module "+path.string());
 
     Isolate::Scope isolateScope(isolate);
     HandleScope handleScope(isolate);

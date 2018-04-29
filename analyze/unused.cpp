@@ -35,12 +35,17 @@ static bool isIdentifierOfExportedDeclaration(Identifier& id)
             return false;
         parent = parent->getParent();
         break;
+    case AstNodeType::TypeAlias:
+        if (((TypeAlias*)parent)->getId() != &id)
+            return false;
+        break;
     default:
         return false;
     }
 
     parent = parent->getParent();
-    return parent->getType() == AstNodeType::ExportNamedDeclaration;
+    return parent->getType() == AstNodeType::ExportNamedDeclaration
+            || parent->getType() == AstNodeType::ExportDefaultDeclaration;
 }
 
 void findUnusedLocalDeclarations(Module &module)
@@ -55,14 +60,14 @@ void findUnusedLocalDeclarations(Module &module)
             || isIdentifierOfExportedDeclaration(identifier))
             continue;
 
-        // TODO: Properties and methods of objects/classes are accessed through member expressions, which we can't resolve yet
+        // Properties and methods of objects/classes are accessed through member expressions, which we can't resolve yet
         // We don't know their usage at all, so we can't way whether any of those are unused.
         if (isUnscopedPropertyOrMethodIdentifier(identifier))
             continue;
 
-        // TODO: FIXME: We need to keep type annotations (like GenericTypeAnnotation) in the AST,
-        // because some class imports are used only in type annotations, and we currently report them unused!
-        // Good newss is names in annotations are also conventional Identifiers, so it shouldn't be a difficult change!
+        // Non-type identifiers in type declarations, like paraneter names, are not unused since they are unscope
+        if (isUnscopedTypeIdentifier(identifier))
+                continue;
 
         // There's no way to remove unused params in a function expression, so no warning, but it's convention to start their name with a '_'
         if (isFunctionalExpressionArgumentIdentifier(identifier)) {
@@ -71,8 +76,11 @@ void findUnusedLocalDeclarations(Module &module)
             continue;
         } else if (identifier.getParent()->getType() == AstNodeType::ImportSpecifier) {
             warn("Unused import of "s+identifier.getName());
+        } else if (isFunctionParameterIdentifier(identifier)) {
+            warn("Unused parameter "s+identifier.getName());
         } else {
             warn("Unused declaration of identifier "s+identifier.getName());
+            // TODO: Pass the AST node, and format the message like <file path>:74:49: warning: <msg>
         }
     }
 }

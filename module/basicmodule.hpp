@@ -17,7 +17,7 @@ public:
     const v8::Local<v8::Object> getExports();
 
 private:
-    virtual void resolveExports() = 0;
+    virtual void evaluate() = 0;
 
 protected:
     IsolateWrapper& isolateWrapper;

@@ -16,7 +16,7 @@ const v8::Local<v8::Object> BasicModule::getExports()
 {
     if (!exportsResolveStarted) {
         exportsResolveStarted = true;
-        resolveExports();
+        evaluate();
     }
 
     Isolate::Scope isolateScope(isolate);

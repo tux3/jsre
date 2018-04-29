@@ -68,7 +68,7 @@ bool NativeModule::hasModule(const std::string& name)
     return nativeModulesTemplates.find(name) != nativeModulesTemplates.end();
 }
 
-void NativeModule::resolveExports()
+void NativeModule::evaluate()
 {
     v8::Isolate::Scope isolateScope(isolate);
     v8::HandleScope handleScope(isolate);

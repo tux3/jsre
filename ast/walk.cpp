@@ -22,6 +22,10 @@ vector<AstNode*> AstRoot::getChildren() {
     return body;
 }
 
+vector<AstNode*> Identifier::getChildren() {
+    return {typeAnnotation};
+}
+
 vector<AstNode*> TemplateLiteral::getChildren() {
     return concat(quasis, expressions);
 }
@@ -33,6 +37,8 @@ vector<AstNode*> TaggedTemplateExpression::getChildren() {
 vector<AstNode*> Function::getChildren() {
     auto children = concat({id}, params);
     children.push_back(body);
+    children.push_back(typeParameters);
+    children.push_back(returnType);
     return children;
 }
 
@@ -177,7 +183,7 @@ vector<AstNode*> DoExpression::getChildren() {
 }
 
 vector<AstNode*> Class::getChildren() {
-    return {id, superClass, body};
+    return concat((vector<AstNode*>&)implements, {id, superClass, body});
 }
 
 vector<AstNode*> ClassBody::getChildren() {
@@ -185,15 +191,15 @@ vector<AstNode*> ClassBody::getChildren() {
 }
 
 vector<AstNode*> ClassProperty::getChildren() {
-    return {key, value};
+    return {key, value, typeAnnotation};
 }
 
 vector<AstNode*> ClassPrivateProperty::getChildren() {
-    return {key, value};
+    return {key, value, typeAnnotation};
 }
 
 vector<AstNode*> ClassMethod::getChildren() {
-    return concat({key}, Function::getChildren());
+    return concat({key, returnType}, Function::getChildren());
 }
 
 vector<AstNode*> ClassPrivateMethod::getChildren() {
@@ -213,7 +219,7 @@ vector<AstNode*> SpreadElement::getChildren() {
 }
 
 vector<AstNode*> ObjectPattern::getChildren() {
-    return properties;
+    return concat(properties, {typeAnnotation});
 }
 
 vector<AstNode*> ArrayPattern::getChildren() {
@@ -225,7 +231,7 @@ vector<AstNode*> AssignmentPattern::getChildren() {
 }
 
 vector<AstNode*> RestElement::getChildren() {
-    return {argument};
+    return {argument, typeAnnotation};
 }
 
 vector<AstNode*> MetaProperty::getChildren() {
@@ -272,3 +278,98 @@ vector<AstNode*> ExportSpecifier::getChildren() {
 vector<AstNode*> ExportDefaultSpecifier::getChildren() {
     return {exported};
 }
+
+vector<AstNode*> TypeAnnotation::getChildren() {
+    return {typeAnnotation};
+}
+
+vector<AstNode*> GenericTypeAnnotation::getChildren() {
+    return {id, typeParameters};
+}
+
+vector<AstNode*> FunctionTypeAnnotation::getChildren() {
+    return concat((vector<AstNode*>&)params, {(AstNode*)rest, returnType});
+}
+
+vector<AstNode*> FunctionTypeParam::getChildren() {
+    return {name, typeAnnotation};
+}
+
+vector<AstNode*> ObjectTypeAnnotation::getChildren() {
+    return concat((vector<AstNode*>&)properties, (vector<AstNode*>&)indexers);
+}
+
+vector<AstNode*> ObjectTypeProperty::getChildren() {
+    return {key, value};
+}
+
+vector<AstNode*> ObjectTypeIndexer::getChildren() {
+    return {id, key, value};
+}
+
+vector<AstNode*> TypeAlias::getChildren() {
+    return {id, typeParameters, right};
+}
+
+vector<AstNode*> TypeParameterInstantiation::getChildren()
+{
+    return params;
+}
+
+vector<AstNode*> TypeParameterDeclaration::getChildren()
+{
+    return params;
+}
+
+vector<AstNode*> TypeCastExpression::getChildren()
+{
+    return {expression, typeAnnotation};
+}
+
+vector<AstNode*> NullableTypeAnnotation::getChildren()
+{
+    return {typeAnnotation};
+}
+
+vector<AstNode*> TupleTypeAnnotation::getChildren()
+{
+    return types;
+}
+
+vector<AstNode*> UnionTypeAnnotation::getChildren()
+{
+    return types;
+}
+
+vector<AstNode*> ClassImplements::getChildren()
+{
+    return {id, typeParameters};
+}
+
+vector<AstNode*> QualifiedTypeIdentifier::getChildren()
+{
+    return {qualification, id};
+}
+
+vector<AstNode*> TypeofTypeAnnotation::getChildren()
+{
+    return {argument};
+}
+
+vector<AstNode*> InterfaceDeclaration::getChildren()
+{
+    return concat(concat({id, (AstNode*)typeParameters, body},
+                         (vector<AstNode*>&)extends),
+                  (vector<AstNode*>&)mixins);
+}
+
+vector<AstNode*> InterfaceExtends::getChildren()
+{
+    return {id, typeParameters};
+}
+
+vector<AstNode*> TypeParameter::getChildren()
+{
+    return {name};
+}
+

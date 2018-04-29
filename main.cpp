@@ -40,8 +40,10 @@ int main(int argc, char* argv[])
         return EXIT_SUCCESS;
     }
 
+    cout << "Resolving project imports..."<<endl;
     mainModule.resolveProjectImports(argPath); // Loads all the project modules (and other dependencies)
     vector<Module*> projectModules = ModuleResolver::getLoadedProjectModules(argPath);
+    cout << "Starting analysis..."<<endl;
     for (Module* module : projectModules)
         module->analyze();
 

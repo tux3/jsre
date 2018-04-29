@@ -27,14 +27,15 @@ static bool isFullScopeNodeType(AstNodeType type)
             || type == AstNodeType::FunctionDeclaration;
 }
 
-static bool isBlockScopeNodeType(AstNodeType type)
+static bool isPartialScopeNodeType(AstNodeType type)
 {
     return type == AstNodeType::BlockStatement
             || type == AstNodeType::CatchClause
             || type == AstNodeType::ForStatement
             || type == AstNodeType::ForInStatement
             || type == AstNodeType::ForOfStatement
-            || type == AstNodeType::SwitchCase;
+            || type == AstNodeType::SwitchCase
+            || type == AstNodeType::TypeAlias; // Not a traditional scope!
 }
 
 // True if this identifier is not a local declaration, but refers to an exported or imported name
@@ -58,13 +59,16 @@ static bool isExternalIdentifier(Identifier& node)
     }
 }
 
-// True if this identifier refers to an object property through a member expression, and not to a value in a local scope
-static bool isMemberExpressionPropertyIdentifier(Identifier& node)
+// True if this identifier is a property in a member expression or a qualified expression, and doesn't refer to a value in a local scope
+static bool isMemberPropertyOrQualifiedIdentifier(Identifier& node)
 {
     auto parent = node.getParent();
-    if (parent->getType() != AstNodeType::MemberExpression)
+    if (parent->getType() == AstNodeType::MemberExpression)
+        return ((MemberExpression*)parent)->getProperty() == &node;
+    else if (parent->getType() == AstNodeType::QualifiedTypeIdentifier)
+        return ((QualifiedTypeIdentifier*)parent)->getId() == &node;
+    else
         return false;
-    return ((MemberExpression*)parent)->getProperty() == &node;
 }
 
 // True if this identifier is a declaration for a "var" variable (not block scoped)
@@ -214,6 +218,18 @@ static void findScopeDeclarations(vector<Scope>& scopes, AstNode& scopeNode)
         case AstNodeType::VariableDeclaration:
             findIdentifierOrFancyDeclarations(scopes, *child);
             break;
+        case AstNodeType::InterfaceDeclaration:
+            addDeclaration(scopes, *((InterfaceDeclaration*)child)->getId());
+            break;
+        case AstNodeType::TypeAlias:
+            addDeclaration(scopes, *((TypeAlias*)child)->getId());
+            break;
+        case AstNodeType::TypeParameterDeclaration:
+        {
+            const auto& params = ((TypeParameterDeclaration*)child)->getParams();
+            for (auto param : params)
+                addDeclaration(scopes, *param->getName());
+        }
         default: break;
         }
     }
@@ -230,7 +246,7 @@ IdentifierResolutionResult resolveModuleIdentifiers(v8::Local<v8::Context> conte
     walkScopes = [&](AstNode& node){
         //trace("[Scope level "s+to_string(fullScopeLevel)+"/"+to_string(scopeDeclarations.size())+"] "+node.getTypeName()+" node");
         bool isFullScopeNode = isFullScopeNodeType(node.getType());
-        bool isBlockScopeNode = isBlockScopeNodeType(node.getType());
+        bool isBlockScopeNode = isPartialScopeNodeType(node.getType());
 
         if (isFullScopeNode || isBlockScopeNode) {
             fullScopeLevel += isFullScopeNode;
@@ -249,11 +265,13 @@ IdentifierResolutionResult resolveModuleIdentifiers(v8::Local<v8::Context> conte
                     break;
                 }
             }
-            if (!found && (isExternalIdentifier(identifier) || isUnscopedPropertyOrMethodIdentifier(identifier))) {
+            if (!found && (isExternalIdentifier(identifier)
+                           || isUnscopedPropertyOrMethodIdentifier(identifier)
+                           || isUnscopedTypeIdentifier(identifier))) {
                 identifierTargets.insert({&identifier, &identifier});
                 found = true;
             }
-            if (!found && fullScopeLevel == 1 && !isMemberExpressionPropertyIdentifier(identifier))
+            if (!found && fullScopeLevel == 1 && !isMemberPropertyOrQualifiedIdentifier(identifier))
                 unresolvedTopLevelIdentifiers.insert(name);
         }
 
@@ -329,6 +347,6 @@ AstNode *resolveImportedIdentifierDeclaration(ImportSpecifier &importSpec)
         return nullptr;
     Module& importedMod = reinterpret_cast<Module&>(ModuleResolver::getModule(sourceMod, source, true));
 
-    /// TODO: This
+    /// TODO: Resolve imported identifiers function
     throw std::runtime_error("Not implemented!");
 }

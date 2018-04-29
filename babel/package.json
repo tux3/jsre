@@ -1,9 +1,9 @@
 {
   "license": "MIT",
   "dependencies": {
-    "babel-standalone": "^7.0.0"
+    "babylon": "^7.0.0"
   },
   "scripts": {
-    "build": "webpack node_modules/babel-standalone/babel.min.js babel.js"
+    "build": "webpack node_modules/babylon/lib/index.js babel.js"
   }
 }
