@@ -36,10 +36,14 @@ Local<Object> consoleModuleTemplate(IsolateWrapper& isolateWrapper)
 
     Local<Object> exports = Object::New(isolate);
 
-    exports->Set(String::NewFromUtf8(isolate, "info"), Function::New(context, logFunction).ToLocalChecked());
-    exports->Set(String::NewFromUtf8(isolate, "log"), Function::New(context, logFunction).ToLocalChecked());
-    exports->Set(String::NewFromUtf8(isolate, "warn"), Function::New(context, logFunction).ToLocalChecked());
-    exports->Set(String::NewFromUtf8(isolate, "error"), Function::New(context, logFunction).ToLocalChecked());
+    auto infoStr = String::NewFromUtf8(isolate, "info");
+    auto logStr = String::NewFromUtf8(isolate, "log");
+    auto warnStr = String::NewFromUtf8(isolate, "warn");
+    auto errorStr = String::NewFromUtf8(isolate, "error");
+    exports->Set(infoStr, Function::New(context, logFunction, infoStr).ToLocalChecked());
+    exports->Set(logStr, Function::New(context, logFunction, logStr).ToLocalChecked());
+    exports->Set(warnStr, Function::New(context, logFunction, warnStr).ToLocalChecked());
+    exports->Set(errorStr, Function::New(context, logFunction, errorStr).ToLocalChecked());
 
     return handleScope.Escape(exports);
 }
