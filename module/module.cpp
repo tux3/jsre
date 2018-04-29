@@ -196,7 +196,8 @@ v8::Local<v8::Module> Module::getExecutableES6Module()
         Local<Context> context = isolate->GetCurrentContext();
         Context::Scope contextScope(context);
 
-        auto thunkSource = string("let _module = require('")+path.c_str()+"'); export default _module;";
+        auto thunkSource = "const _m=require('"s+path.c_str()+"');export default _m;\n";
+        string exportsStr;
 
         auto exports = getExports();
         auto exportedProps = exports->GetOwnPropertyNames(context).ToLocalChecked();
@@ -205,8 +206,11 @@ v8::Local<v8::Module> Module::getExecutableES6Module()
             auto nameStr = std::string(*v8::String::Utf8Value(isolate, exportedProps->Get(i).As<String>()));
             //cout <<nameStr<<endl;
 
-            thunkSource += "export let "+nameStr+"=_module."+nameStr+";";
+            string tmpName = "_"+to_string(i);
+            thunkSource += "const "+tmpName+"=_m."+nameStr+";";
+            exportsStr += tmpName +" as "+nameStr+",";
         }
+        thunkSource += "\nexport {"+exportsStr+"};";
         //cout << thunkSource << endl;
 
         compiledThunkModule.Reset(isolate, compileModuleFromSource(path, thunkSource));
