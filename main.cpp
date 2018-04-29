@@ -13,6 +13,7 @@ using json = nlohmann::json;
 void helpAndDie(const char* selfPath)
 {
     cout << "Usage: " << selfPath << " <file.js | project_dir>" << endl;
+    exit(EXIT_FAILURE);
 }
 
 int main(int argc, char* argv[])
