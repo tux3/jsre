@@ -50,6 +50,10 @@ int main(int argc, char* argv[])
     setSuggest(suggest);
 
     fs::path argPath(argv[optind]);
+    // In JS relative imports look like "./foo/bar" not "foo/bar", otherwise it refers to something in mode_modules
+    if (argPath.is_relative())
+        argPath = "./" / argPath;
+
     fs::path mainFilePath;
     bool singleFile;
     if (fs::is_directory(argPath)) {
@@ -61,7 +65,7 @@ int main(int argc, char* argv[])
     }
 
     IsolateWrapper isolateWrapper;
-    Module& mainModule = (Module&)ModuleResolver::getModule(isolateWrapper, "/", argv[optind], true);
+    Module& mainModule = (Module&)ModuleResolver::getModule(isolateWrapper, fs::current_path(), argPath, true);
 
     if (singleFile) {
         mainModule.analyze();

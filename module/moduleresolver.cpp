@@ -70,7 +70,9 @@ std::vector<Module *> ModuleResolver::getLoadedProjectModules(fs::path projectDi
 
 fs::path ModuleResolver::resolve(fs::path fromPath, string requestedName)
 {
-    fs::path basePath = fromPath.remove_filename();
+    fs::path basePath = fromPath;
+    if (fs::is_regular_file(fromPath))
+            basePath = basePath.remove_filename();
     fs::path fullPath;
 
     if (requestedName[0] == '/')
