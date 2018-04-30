@@ -593,11 +593,13 @@ DoExpression::DoExpression(AstSourceSpan location, AstNode* body)
 }
 
 Class::Class(AstSourceSpan location, AstNodeType type, AstNode* id, AstNode* superClass, AstNode* body,
-             std::vector<ClassImplements*> implements)
+             TypeParameterDeclaration* typeParameters, TypeParameterInstantiation *superTypeParameters, std::vector<ClassImplements*> implements)
     : AstNode(location, type)
     , id{ id }
     , superClass{ superClass }
     , body{ body }
+    , typeParameters{ typeParameters }
+    , superTypeParameters{ superTypeParameters }
     , implements{ implements }
 {
 }
@@ -607,14 +609,19 @@ Identifier* Class::getId()
     return reinterpret_cast<Identifier*>(id);
 }
 
+TypeParameterDeclaration *Class::getTypeParameters()
+{
+    return typeParameters;
+}
+
 const std::vector<ClassImplements*>& Class::getImplements()
 {
     return implements;
 }
 
 ClassExpression::ClassExpression(AstSourceSpan location, AstNode* id, AstNode* superClass, AstNode* body,
-                                 std::vector<ClassImplements*> implements)
-    : Class(location, AstNodeType::ClassExpression, id, superClass, body, implements)
+                                 TypeParameterDeclaration *typeParameters, TypeParameterInstantiation *superTypeParameters, std::vector<ClassImplements*> implements)
+    : Class(location, AstNodeType::ClassExpression, id, superClass, body, typeParameters, superTypeParameters, implements)
 {
     setParentOfChildren();
 }
@@ -692,8 +699,9 @@ Identifier* ClassPrivateProperty::getKey()
     return reinterpret_cast<Identifier*>(key);
 }
 
-ClassDeclaration::ClassDeclaration(AstSourceSpan location, AstNode* id, AstNode* superClass, AstNode* body, std::vector<ClassImplements*> implements)
-    : Class(location, AstNodeType::ClassDeclaration, id, superClass, body, implements)
+ClassDeclaration::ClassDeclaration(AstSourceSpan location, AstNode* id, AstNode* superClass, AstNode* body,
+                                   TypeParameterDeclaration *typeParameters, TypeParameterInstantiation *superTypeParameters, std::vector<ClassImplements*> implements)
+    : Class(location, AstNodeType::ClassDeclaration, id, superClass, body, typeParameters, superTypeParameters, implements)
 {
     setParentOfChildren();
 }

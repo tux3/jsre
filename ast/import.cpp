@@ -546,7 +546,9 @@ AstNode* importClassExpression(const json& node, AstSourceSpan loc)
     if (node.find("implements") != node.end())
         for (auto&& child : node["implements"])
             implements.push_back((ClassImplements*)importNode(child));
-    return new ClassExpression(loc, id, superClass, importNode(node["body"]), implements);
+    return new ClassExpression(loc, id, superClass, importNode(node["body"]),
+                                (TypeParameterDeclaration*)importNodeOrNullptr(node, "typeParameters"),
+                                (TypeParameterInstantiation*)importNodeOrNullptr(node, "superTypeParameters"), implements);
 }
 
 AstNode* importClassBody(const json& node, AstSourceSpan loc)
@@ -627,7 +629,9 @@ AstNode* importClassDeclaration(const json& node, AstSourceSpan loc)
     if (node.find("implements") != node.end())
         for (auto&& child : node["implements"])
             implements.push_back((ClassImplements*)importNode(child));
-    return new ClassDeclaration(loc, id, superClass, importNode(node["body"]), implements);
+    return new ClassDeclaration(loc, id, superClass, importNode(node["body"]),
+                                (TypeParameterDeclaration*)importNodeOrNullptr(node, "typeParameters"),
+                                (TypeParameterInstantiation*)importNodeOrNullptr(node, "superTypeParameters"), implements);
 }
 
 AstNode* importVariableDeclaration(const json& node, AstSourceSpan loc)

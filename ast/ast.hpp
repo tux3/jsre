@@ -578,26 +578,32 @@ private:
 class Class : public AstNode {
 public:
     Identifier* getId();
+    TypeParameterDeclaration* getTypeParameters();
     const std::vector<ClassImplements*>& getImplements();
 
 protected:
-    Class(AstSourceSpan location, AstNodeType type, AstNode* id, AstNode* superClass, AstNode* body, std::vector<ClassImplements*> implements);
+    Class(AstSourceSpan location, AstNodeType type, AstNode* id, AstNode* superClass, AstNode* body,
+          TypeParameterDeclaration* typeParameters, TypeParameterInstantiation* superTypeParameters, std::vector<ClassImplements*> implements);
     virtual std::vector<AstNode*> getChildren() override;
 
 protected:
     AstNode *id, *superClass;
     AstNode* body;
+    TypeParameterDeclaration* typeParameters;
+    TypeParameterInstantiation* superTypeParameters;
     std::vector<ClassImplements*> implements;
 };
 
 class ClassExpression : public Class {
 public:
-    ClassExpression(AstSourceSpan location, AstNode* id, AstNode* superClass, AstNode* body, std::vector<ClassImplements*> implements);
+    ClassExpression(AstSourceSpan location, AstNode* id, AstNode* superClass, AstNode* body,
+                    TypeParameterDeclaration* typeParameters, TypeParameterInstantiation* superTypeParameters, std::vector<ClassImplements*> implements);
 };
 
 class ClassDeclaration : public Class {
 public:
-    ClassDeclaration(AstSourceSpan location, AstNode* id, AstNode* superClass, AstNode* body, std::vector<ClassImplements*> implements);
+    ClassDeclaration(AstSourceSpan location, AstNode* id, AstNode* superClass, AstNode* body,
+                     TypeParameterDeclaration* typeParameters, TypeParameterInstantiation* superTypeParameters, std::vector<ClassImplements*> implements);
 };
 
 class ClassBody : public AstNode {

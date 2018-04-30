@@ -146,6 +146,13 @@ static void findIdentifierOrFancyDeclarations(vector<Scope>& scopes, AstNode& id
     }
 }
 
+static void findTypeParameterDeclarations(vector<Scope>& scopes, AstNode& node)
+{
+    const auto& params = ((TypeParameterDeclaration&)node).getParams();
+    for (auto param : params)
+        addDeclaration(scopes, *param->getName());
+}
+
 static void findScopeDeclarations(vector<Scope>& scopes, AstNode& scopeNode)
 {
     vector<AstNode*> children;
@@ -203,6 +210,8 @@ static void findScopeDeclarations(vector<Scope>& scopes, AstNode& scopeNode)
         switch (child->getType()) {
         case AstNodeType::ClassDeclaration:
             addDeclaration(scopes, *((ClassDeclaration*)child)->getId());
+            if (auto typeParameters = ((ClassDeclaration*)child)->getTypeParameters())
+                findTypeParameterDeclarations(scopes, *typeParameters);
             break;
         case AstNodeType::FunctionDeclaration:
             addDeclaration(scopes, *((FunctionDeclaration*)child)->getId());
@@ -225,11 +234,8 @@ static void findScopeDeclarations(vector<Scope>& scopes, AstNode& scopeNode)
             addDeclaration(scopes, *((TypeAlias*)child)->getId());
             break;
         case AstNodeType::TypeParameterDeclaration:
-        {
-            const auto& params = ((TypeParameterDeclaration*)child)->getParams();
-            for (auto param : params)
-                addDeclaration(scopes, *param->getName());
-        }
+            findTypeParameterDeclarations(scopes, *child);
+            break;
         default: break;
         }
     }

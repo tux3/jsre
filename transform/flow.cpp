@@ -14,19 +14,19 @@ std::string stripFlowTypes(const std::string &source, AstNode &ast)
     auto isTypeAnnotation = [](AstNode& node) {
         return node.getType() == AstNodeType::TypeAnnotation;
     };
-    auto isTypeAlias = [](AstNode& node) {
-        return node.getType() == AstNodeType::TypeAlias;
+    auto isTypeAliasOrInterface = [](AstNode& node) {
+        return node.getType() == AstNodeType::TypeAlias
+                || node.getType() == AstNodeType::InterfaceDeclaration;
     };
-    auto isTypeExportDeclaration = [](AstNode& node) {
-        return node.getType() == AstNodeType::ExportNamedDeclaration
-            && ((ExportNamedDeclaration&)node).getKind() == ExportNamedDeclaration::Kind::Type;
+    auto isTypeImportExportDeclaration = [](AstNode& node) {
+        return (node.getType() == AstNodeType::ImportDeclaration
+                && ((ImportDeclaration&)node).getKind() == ImportDeclaration::Kind::Type)
+                || (node.getType() == AstNodeType::ExportNamedDeclaration
+                && ((ExportNamedDeclaration&)node).getKind() == ExportNamedDeclaration::Kind::Type);
     };
-    auto isTypeImportDeclaration = [](AstNode& node) {
-        return node.getType() == AstNodeType::ImportDeclaration
-                && ((ImportDeclaration&)node).getKind() == ImportDeclaration::Kind::Type;
-    };
-    auto isTypeParameterDeclaration = [](AstNode& node) {
-        return node.getType() == AstNodeType::TypeParameterDeclaration;
+    auto isTypeParameterDeclarationOrInstantiation = [](AstNode& node) {
+        return node.getType() == AstNodeType::TypeParameterDeclaration
+                || node.getType() == AstNodeType::TypeParameterInstantiation;
     };
     auto isTypeImportSpecifier = [](AstNode& node) {
         return node.getType() == AstNodeType::ImportSpecifier && ((ImportSpecifier&)node).isTypeImport();
@@ -41,9 +41,8 @@ std::string stripFlowTypes(const std::string &source, AstNode &ast)
     };
 
     walkAst(ast, [&](AstNode& node){
-        // Optional identifiers have a trailing '?' before the type annotation
         if (isOptionalIdentifier(node)) {
-            blankNext(transformed, node.getLocation().start.offset, '?');
+            blankNext(transformed, node.getLocation().start.offset, '?'); // Optional identifiers have a trailing '?'
         } else if (isTypeImportSpecifier(node)) {
             blankNodeFromSource(transformed, node);
             blankNextComma(transformed, node); // The ',' following the specifier needs to be removed, if any
@@ -51,10 +50,9 @@ std::string stripFlowTypes(const std::string &source, AstNode &ast)
             size_t startPos = ((ClassDeclaration&)node).getId()->getLocation().end.offset;
             blankUntil(transformed, startPos, '{');
         } else if (isTypeAnnotation(node)
-                   || isTypeAlias(node)
-                   || isTypeExportDeclaration(node)
-                   || isTypeImportDeclaration(node)
-                   || isTypeParameterDeclaration(node)) {
+                   || isTypeAliasOrInterface(node)
+                   || isTypeImportExportDeclaration(node)
+                   || isTypeParameterDeclarationOrInstantiation(node)) {
             blankNodeFromSource(transformed, node);
         }
     });

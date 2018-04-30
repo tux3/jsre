@@ -183,7 +183,7 @@ vector<AstNode*> DoExpression::getChildren() {
 }
 
 vector<AstNode*> Class::getChildren() {
-    return concat((vector<AstNode*>&)implements, {id, superClass, body});
+    return concat((vector<AstNode*>&)implements, {id, superClass, body, typeParameters, superTypeParameters});
 }
 
 vector<AstNode*> ClassBody::getChildren() {
