@@ -7,6 +7,8 @@ class AstNode;
 
 // If left to false, trace messages will not be shown
 void setDebug(bool enable);
+// If left to false, suggest messages will not be shown
+void setSuggest(bool enable);
 
 void trace(const std::string& msg); //< Debug information.
 void trace(AstNode& node, const std::string& msg); //< Debug information.

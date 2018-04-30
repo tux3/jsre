@@ -15,7 +15,7 @@ using json = nlohmann::json;
 
 void helpAndDie(const char* selfPath)
 {
-    cout << "Usage: " << selfPath << " [options] <file.js | project_dir>" << endl;
+    cout << "Usage: " << selfPath << " [-s] [-d] <file.js | project_dir>" << endl;
     exit(EXIT_FAILURE);
 }
 
@@ -25,10 +25,14 @@ int main(int argc, char* argv[])
         helpAndDie(argv[0]);
 
     bool debug = false;
-    for (int c; (c = getopt(argc, argv, "d")) != -1;) {
+    bool suggest = false;
+    for (int c; (c = getopt(argc, argv, "ds")) != -1;) {
         switch (c) {
         case 'd':
-            debug = 1;
+            debug = true;
+            break;
+        case 's':
+            suggest = true;
             break;
         case '?':
             if (optopt == 'c')
@@ -43,6 +47,7 @@ int main(int argc, char* argv[])
         }
     }
     setDebug(debug);
+    setSuggest(suggest);
 
     fs::path argPath(argv[optind]);
     fs::path mainFilePath;

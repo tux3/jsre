@@ -7,10 +7,16 @@
 using namespace std;
 
 static bool debugEnabled = false;
+static bool suggestEnabled = false;
 
 void setDebug(bool enable)
 {
     debugEnabled = enable;
+}
+
+void setSuggest(bool enable)
+{
+    suggestEnabled = enable;
 }
 
 static void printLocation(AstNode& node)
@@ -38,11 +44,15 @@ void trace(AstNode &node, const string &msg)
 
 void suggest(const string &msg)
 {
+    if (!suggestEnabled)
+        return;
     cout << "suggest: " << msg << endl;
 }
 
 void suggest(AstNode &node, const string &msg)
 {
+    if (!suggestEnabled)
+        return;
     printLocation(node);
     suggest(msg);
 }
