@@ -56,6 +56,17 @@ bool ModuleResolver::isProjectModule(fs::path projectDir, fs::path filePath)
             && relative.string().find("node_modules") == string::npos;
 }
 
+bool ModuleResolver::isProjectModule(filesystem::__cxx11::path projectDir, filesystem::__cxx11::path basePath, string requestedName)
+{
+    fs::path fullPath = resolve(basePath, requestedName);
+    if (fullPath.empty()) {
+        trace("isProjectModule failed to resolve import from "s+basePath.string()+" for "+requestedName);
+        return false;
+    }
+
+    return isProjectModule(projectDir, fullPath);
+}
+
 std::vector<Module *> ModuleResolver::getLoadedProjectModules(fs::path projectDir)
 {
     vector<Module*> projectMods;

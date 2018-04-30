@@ -309,9 +309,10 @@ void Module::resolveProjectImports(std::filesystem::path projectDir)
         String::Utf8Value importNameStr(isolate, importName);
         if (NativeModule::hasModule(*importNameStr))
             continue;
-        Module& importedModule = reinterpret_cast<Module&>(ModuleResolver::getModule(*this, *importNameStr, true));
-        if (ModuleResolver::isProjectModule(projectDir, importedModule.path))
+        if (ModuleResolver::isProjectModule(projectDir, getPath(), *importNameStr)) {
+            Module& importedModule = reinterpret_cast<Module&>(ModuleResolver::getModule(*this, *importNameStr, false));
             importedModule.resolveProjectImports(projectDir);
+        }
     }
 
     // Resolve imports through require() calls
@@ -332,9 +333,10 @@ void Module::resolveProjectImports(std::filesystem::path projectDir)
         if (NativeModule::hasModule(arg))
             return;
         try {
-            Module& importedModule = reinterpret_cast<Module&>(ModuleResolver::getModule(*this, arg, false));
-            if (ModuleResolver::isProjectModule(projectDir, importedModule.path))
+            if (ModuleResolver::isProjectModule(projectDir, getPath(), arg)) {
+                Module& importedModule = reinterpret_cast<Module&>(ModuleResolver::getModule(*this, arg, false));
                 importedModule.resolveProjectImports(projectDir);
+            }
         } catch (std::runtime_error&) {
             // This is fine. We're trying to resolve every require() everywhere,
             // not just those reachable from the global scope, so some are expected to fail...

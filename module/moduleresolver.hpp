@@ -15,6 +15,7 @@ public:
     static BasicModule& getModule(IsolateWrapper& isolateWrapper, std::filesystem::path basePath, std::string requestedName, bool isImport = false);
     static std::filesystem::path getProjectMainFile(std::filesystem::path projectDir);
     static bool isProjectModule(std::filesystem::path projectDir, std::filesystem::path filePath);
+    static bool isProjectModule(std::filesystem::path projectDir, std::filesystem::path basePath, std::string requestedName);
     static std::vector<Module*> getLoadedProjectModules(std::filesystem::path projectDir);
     static void requireFunction(const v8::FunctionCallbackInfo<v8::Value>& args);
     static v8::MaybeLocal<v8::Module> resolveImportCallback(v8::Local<v8::Context> context, v8::Local<v8::String> specifier, v8::Local<v8::Module> referrer);
