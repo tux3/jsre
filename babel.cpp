@@ -90,7 +90,5 @@ nlohmann::json transpileScript(IsolateWrapper& isolateWrapper, const std::string
 
     Local<String> jsonStr = JSON::Stringify(context, result.As<Object>()).ToLocalChecked();
     String::Utf8Value jsonStrUtf8(jsonStr);
-    json json = json::parse(*jsonStrUtf8, *jsonStrUtf8 + jsonStrUtf8.length());
-    //return { json["code"].get<std::string>(), json["ast"] };
-    return json;
+    return json::parse(*jsonStrUtf8, *jsonStrUtf8 + jsonStrUtf8.length());
 }

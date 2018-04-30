@@ -22,11 +22,11 @@ static const unordered_map<string, AstNode* (*)(const json&, AstSourceSpan)> imp
 
 AstRoot* importBabylonAst(Module& parentModule, const json& jast)
 {
-    json program = jast["program"];
+    const json& program = jast["program"];
     assert(program["type"] == "Program");
 
     vector<AstNode*> bodyNodes;
-    for (auto&& jnode : program["body"])
+    for (const auto& jnode : program["body"])
         bodyNodes.push_back(importNode(jnode));
     auto loc = importLocation(program);
 
