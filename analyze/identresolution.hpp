@@ -24,7 +24,7 @@ struct IdentifierResolutionResult
  * Returns a map of identifiers to their point of declaration in the AST.
  * Indentifiers for which a declaration wasn't found aren't included in the map.
  */
-IdentifierResolutionResult resolveModuleIdentifiers(v8::Local<v8::Context> context, AstRoot* ast);
+IdentifierResolutionResult resolveModuleIdentifiers(v8::Local<v8::Context> context, AstRoot& ast);
 
 /**
  * When necessary inserts a global object with value undefined to serve as a definition

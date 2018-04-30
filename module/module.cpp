@@ -23,6 +23,9 @@ Module::Module(IsolateWrapper& isolateWrapper, fs::path path)
     : BasicModule(isolateWrapper)
     , path{ path }
 {
+    originalSource = readFileStr(path.c_str());
+    astFuture = parseSourceScriptAsync(*this, originalSource);
+
     v8::Isolate::Scope isolateScope(isolate);
     v8::HandleScope handleScope(isolate);
     v8::Local<v8::String> filename = v8::String::NewFromUtf8(isolate, path.c_str());
@@ -31,16 +34,15 @@ Module::Module(IsolateWrapper& isolateWrapper, fs::path path)
     context->Global()->Set(context, v8::String::NewFromUtf8(isolate, "require"), localRequire).ToChecked();
     context->SetEmbedderData((int)EmbedderDataIndex::ModulePath, filename);
     persistentContext.Reset(isolate, context);
-
-    originalSource = readFileStr(path.c_str());
-    //std::tie(transpiledSource, jast) = transpileScript(isolateWrapper, originalSource);
-    auto jast = transpileScript(isolateWrapper, originalSource);
-    ast = importBabylonAst(*this, jast);
-    transpiledSource = stripFlowTypes(originalSource, *ast);
 }
 
-const AstRoot& Module::getAst()
+AstRoot& Module::getAst()
 {
+    if (!ast) {
+        assert(astFuture.valid());
+        ast.reset(astFuture.get());
+    }
+
     return *ast;
 }
 
@@ -74,7 +76,7 @@ void Module::resolveLocalIdentifiers()
     Context::Scope contextScope(context);
     Local<v8::Module> module = getExecutableModule();
 
-    IdentifierResolutionResult result = resolveModuleIdentifiers(context, ast);
+    IdentifierResolutionResult result = resolveModuleIdentifiers(context, getAst());
     resolvedLocalIdentifiers = result.resolvedIdentifiers;
     missingContextIdentifiers = result.missingGlobalIdentifiers;
 
@@ -161,6 +163,7 @@ v8::Local<v8::Module> Module::getCompiledModule()
     EscapableHandleScope handleScope(isolate);
 
     if (compiledModule.IsEmpty()) {
+        auto transpiledSource = stripFlowTypes(originalSource, getAst());
         auto module = compileModuleFromSource(path, transpiledSource);
         compiledModule.Reset(isolate, module);
     }
@@ -254,7 +257,7 @@ void Module::evaluate()
     Local<v8::Module> module = getExecutableModule();
     defineMissingGlobalIdentifiers(context, missingContextIdentifiers);
 
-    if (auto maybeBool = module->InstantiateModule(context, ModuleResolver::resolveImportCallback); maybeBool.IsNothing() || !maybeBool.ToChecked()) {
+    if (auto maybeBool = module->InstantiateModule(context, ModuleResolver::getResolveImportCallback(*this)); maybeBool.IsNothing() || !maybeBool.ToChecked()) {
         reportV8Exception(isolate, &trycatch);
         throw runtime_error("Failed to compile module");
     }
@@ -273,7 +276,7 @@ bool Module::isES6Module()
 {
     /// TODO: (later) This function should also look for dynamic ES6 imports in the AST, not just top-level.
     /// Thankfully that's super rare to have dynamic imports and no other top level imports and exports at this point in time
-    for (AstNode* node : ast->getBody()) {
+    for (AstNode* node : getAst().getBody()) {
         if (node->getType() == AstNodeType::Import
             || node->getType() == AstNodeType::ImportDeclaration
             || node->getType() == AstNodeType::ImportDefaultSpecifier
@@ -289,7 +292,7 @@ bool Module::isES6Module()
     return false;
 }
 
-void Module::resolveProjectImports(std::filesystem::path projectDir)
+void Module::resolveProjectImports(const fs::path& projectDir)
 {
     using namespace v8;
 
@@ -302,6 +305,8 @@ void Module::resolveProjectImports(std::filesystem::path projectDir)
     Isolate::Scope isolateScope(isolate);
     HandleScope handleScope(isolate);
 
+    vector<Module*> modulesToResolve;
+
     // Resolve ES6 imports
     auto module = getCompiledModule();
     for (int i=0; i<module->GetModuleRequestsLength(); ++i) {
@@ -311,14 +316,14 @@ void Module::resolveProjectImports(std::filesystem::path projectDir)
             continue;
         if (ModuleResolver::isProjectModule(projectDir, getPath(), *importNameStr)) {
             Module& importedModule = reinterpret_cast<Module&>(ModuleResolver::getModule(*this, *importNameStr, false));
-            importedModule.resolveProjectImports(projectDir);
+            modulesToResolve.push_back(&importedModule);
         }
     }
 
     // Resolve imports through require() calls
     // TODO: We only resolve require calls taking a literal now, we should try to get possibly values if it takes an identifier!
     // For example if there's an if/else assigning a variable, and we import that variable, at some point we should aim to resolve that!
-    walkAst(*ast, [&](AstNode& node){
+    walkAst(getAst(), [&](AstNode& node){
         auto parent = (CallExpression*)node.getParent();
         const auto& args = parent->getArguments();
         if (args.size() < 1 || args[0]->getType() != AstNodeType::StringLiteral)
@@ -335,7 +340,7 @@ void Module::resolveProjectImports(std::filesystem::path projectDir)
         try {
             if (ModuleResolver::isProjectModule(projectDir, getPath(), arg)) {
                 Module& importedModule = reinterpret_cast<Module&>(ModuleResolver::getModule(*this, arg, false));
-                importedModule.resolveProjectImports(projectDir);
+                modulesToResolve.push_back(&importedModule);
             }
         } catch (std::runtime_error&) {
             // This is fine. We're trying to resolve every require() everywhere,
@@ -348,4 +353,7 @@ void Module::resolveProjectImports(std::filesystem::path projectDir)
         auto& id = (Identifier&)node;
         return id.getName() == "require" && resolvedLocalIdentifiers.find(&id) == resolvedLocalIdentifiers.end();
     });
+
+    for (auto module : modulesToResolve)
+        module->resolveProjectImports(projectDir);
 }

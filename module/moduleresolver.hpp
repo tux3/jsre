@@ -1,6 +1,7 @@
 #ifndef MODULERESOLVER_HPP
 #define MODULERESOLVER_HPP
 
+#include "ast/ast.hpp"
 #include "module.hpp"
 #include "nativemodule.hpp"
 #include <filesystem>
@@ -17,8 +18,10 @@ public:
     static bool isProjectModule(std::filesystem::path projectDir, std::filesystem::path filePath);
     static bool isProjectModule(std::filesystem::path projectDir, std::filesystem::path basePath, std::string requestedName);
     static std::vector<Module*> getLoadedProjectModules(std::filesystem::path projectDir);
+
+    using ResolveImportCallbackType = v8::MaybeLocal<v8::Module>(*)(v8::Local<v8::Context> context, v8::Local<v8::String> specifier, v8::Local<v8::Module> referrer);
+    static ResolveImportCallbackType getResolveImportCallback(Module& importingModule);
     static void requireFunction(const v8::FunctionCallbackInfo<v8::Value>& args);
-    static v8::MaybeLocal<v8::Module> resolveImportCallback(v8::Local<v8::Context> context, v8::Local<v8::String> specifier, v8::Local<v8::Module> referrer);
 
 private:
     static std::filesystem::path resolve(std::filesystem::path fromPath, std::string requestedName);
@@ -26,6 +29,8 @@ private:
     static std::filesystem::path resolveAsDirectory(std::filesystem::path path);
     static std::filesystem::path resolveNodeModule(std::filesystem::path basePath, std::string requestedName);
     static std::string getNodeModuleMainFile(std::filesystem::path packageFilePath);
+    // This must not be called before adding an importing module to the compiledModuleMap!
+    static v8::MaybeLocal<v8::Module> resolveImportCallback(v8::Local<v8::Context> context, v8::Local<v8::String> specifier, v8::Local<v8::Module> referrer);
 
 private:
     static std::unordered_map<std::string, NativeModule> nativeModuleMap;

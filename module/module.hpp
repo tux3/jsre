@@ -6,6 +6,7 @@
 #include <json.hpp>
 #include <string>
 #include <unordered_map>
+#include <future>
 #include <v8.h>
 
 class IsolateWrapper;
@@ -17,9 +18,9 @@ class Module final : public BasicModule {
 public:
     Module(IsolateWrapper& isolateWrapper, std::filesystem::path path);
     // This instantiates modules recursively imported or statically require()'d by this one if they are part of the project
-    void resolveProjectImports(std::filesystem::path projectDir);
+    void resolveProjectImports(const std::filesystem::path &projectDir);
     void analyze(); //< Performs analysis and reports result to the user
-    const AstRoot& getAst();
+    AstRoot& getAst();
     v8::Local<v8::Module> getExecutableModule();
     v8::Local<v8::Module> getExecutableES6Module();
     int getCompiledModuleIdentityHash();
@@ -45,8 +46,9 @@ private:
 
 private:
     std::filesystem::path path;
-    std::string originalSource, transpiledSource;
-    AstRoot* ast;
+    std::string originalSource;
+    std::future<AstRoot*> astFuture;
+    std::unique_ptr<AstRoot> ast;
     v8::Persistent<v8::Module> compiledModule;
     v8::Persistent<v8::Module> compiledThunkModule; //< ES6 thunk generated if this module doesn't use ES6 import/exports
     bool importsResolved = false; //< Breaks cycles when manually instantiating all imports

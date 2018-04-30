@@ -91,6 +91,6 @@ find_library(ICUI18N_LIB NAMES icui18n)
 
 add_executable(${PROJECT_NAME} ${SRCS})
 target_include_directories(${PROJECT_NAME} PRIVATE ${V8_INCLUDE_DIR} ${PROJECT_SOURCE_DIR} ${PROJECT_BINARY_DIR}/generated)
-target_link_libraries(${PROJECT_NAME} PRIVATE babel native_modules_js startup_snapshots ${V8_LIB_V8} ${V8_LIB_BASE} ${V8_LIB_PLATFORM} ${ICUUC_LIB} ${ICUI18N_LIB} "stdc++fs")
+target_link_libraries(${PROJECT_NAME} PRIVATE pthread babel native_modules_js startup_snapshots ${V8_LIB_V8} ${V8_LIB_BASE} ${V8_LIB_PLATFORM} ${ICUUC_LIB} ${ICUI18N_LIB} "stdc++fs")
 set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD 17
                                                  CXX_STANDARD_REQUIRED 1)

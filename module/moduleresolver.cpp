@@ -36,9 +36,7 @@ BasicModule& ModuleResolver::getModule(IsolateWrapper& isolateWrapper, std::file
 
     v8::HandleScope scope(*isolateWrapper);
     fullPath = fs::canonical(fullPath);
-    auto& module = moduleMap.try_emplace(fullPath, isolateWrapper, fullPath).first->second;
-    compiledModuleMap.emplace(module.getCompiledModuleIdentityHash(), module);
-    return module;
+    return moduleMap.try_emplace(fullPath, isolateWrapper, fullPath).first->second;
 }
 
 fs::path ModuleResolver::getProjectMainFile(fs::path projectDir)
@@ -77,6 +75,12 @@ std::vector<Module *> ModuleResolver::getLoadedProjectModules(fs::path projectDi
         projectMods.push_back(&mod);
     }
     return projectMods;
+}
+
+ModuleResolver::ResolveImportCallbackType ModuleResolver::getResolveImportCallback(Module &importingModule)
+{
+    compiledModuleMap.try_emplace(importingModule.getCompiledModuleIdentityHash(), importingModule);
+    return &resolveImportCallback;
 }
 
 fs::path ModuleResolver::resolve(fs::path fromPath, string requestedName)
@@ -203,6 +207,7 @@ v8::MaybeLocal<v8::Module> ModuleResolver::resolveImportCallback(v8::Local<v8::C
         return nativeModuleMap.try_emplace(*specifierStr, referrerModule.getIsolateWrapper(), *specifierStr).first->second.getWrapperModule();
 
     Module& importedModule = reinterpret_cast<Module&>(getModule(referrerModule, *specifierStr, true));
+    compiledModuleMap.try_emplace(importedModule.getCompiledModuleIdentityHash(), importedModule);
     v8::Local<v8::Module> importedCompiledModule = importedModule.getExecutableES6Module();
 
     return handleScope.Escape(importedCompiledModule);

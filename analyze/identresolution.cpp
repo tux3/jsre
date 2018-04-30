@@ -241,7 +241,7 @@ static void findScopeDeclarations(vector<Scope>& scopes, AstNode& scopeNode)
     }
 }
 
-IdentifierResolutionResult resolveModuleIdentifiers(v8::Local<v8::Context> context, AstRoot* ast)
+IdentifierResolutionResult resolveModuleIdentifiers(v8::Local<v8::Context> context, AstRoot& ast)
 {
     int fullScopeLevel = 0;
     vector<Scope> scopeDeclarations;
@@ -290,7 +290,7 @@ IdentifierResolutionResult resolveModuleIdentifiers(v8::Local<v8::Context> conte
             scopeDeclarations.pop_back();
         }
     };
-    walkScopes(*ast);
+    walkScopes(ast);
 
     using namespace v8;
 

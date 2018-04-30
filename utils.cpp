@@ -1,8 +1,65 @@
 #include "utils.hpp"
 #include <fstream>
+#include <filesystem>
 #include <v8.h>
 
 using namespace std;
+namespace fs = std::filesystem;
+
+static fs::path getCacheDirectory()
+{
+    static const std::string appName = "jsre";
+    static auto fallback = fs::temp_directory_path();
+
+#if defined(__linux__)
+    char* home = getenv("HOME");
+    if (!home)
+        return fallback;
+    return fs::path(home) / ".cache" / appName;
+#elif defined(__APPLE__)
+    char* home = getenv("HOME");
+    if (!home)
+        return fallback;
+    return fs::path(home) / "Library" / "Caches" / appName;
+#elif defined(_WIN32)
+    char* home = getenv("USERPROFILE");
+    if (!home)
+        return fallback;
+    return fs::path(home) / "AppData" / "Local" / appName;
+#else
+    auto
+#endif
+}
+
+bool tryWriteCacheFile(const char *name, const std::vector<uint8_t> &data)
+{
+    auto dir = getCacheDirectory();
+    fs::create_directories(dir);
+    ofstream file(dir / name, ios::binary);
+    if (!file.is_open())
+        return false;
+    file.write((const char*)data.data(), static_cast<ssize_t>(data.size()));
+    return true;
+}
+
+bool tryRemoveCacheFile(const char *name)
+{
+    return fs::remove(getCacheDirectory() / name);
+}
+
+optional<vector<uint8_t>> tryReadCacheFile(const char *name)
+{
+    auto dir = getCacheDirectory();
+    ifstream file(dir / name, ios::binary);
+    if (!file.is_open())
+        return nullopt;
+    file.seekg(0, ios::end);
+    auto size = file.tellg();
+    vector<uint8_t> data(static_cast<size_t>(size));
+    file.seekg(0, ios::beg);
+    file.read((char*)data.data(), size);
+    return data;
+}
 
 std::string readFileStr(const char* path)
 {

@@ -2,6 +2,7 @@
 #include "isolatewrapper.hpp"
 #include "module/moduleresolver.hpp"
 #include "reporting.hpp"
+#include "babel.hpp"
 #include <filesystem>
 #include <getopt.h>
 #include <iostream>
@@ -21,6 +22,7 @@ void helpAndDie(const char* selfPath)
 
 int main(int argc, char* argv[])
 {
+    // Handle arguments
     if (argc < 2)
         helpAndDie(argv[0]);
 
@@ -50,9 +52,8 @@ int main(int argc, char* argv[])
     setSuggest(suggest);
 
     fs::path argPath(argv[optind]);
-    // In JS relative imports look like "./foo/bar" not "foo/bar", otherwise it refers to something in mode_modules
     if (argPath.is_relative())
-        argPath = "./" / argPath;
+        argPath = "./" / argPath; // In JS relative imports look like "./foo/bar" not "foo/bar", otherwise it refers to something in mode_modules
 
     fs::path mainFilePath;
     bool singleFile;
@@ -64,20 +65,25 @@ int main(int argc, char* argv[])
         singleFile = true;
     }
 
+    // Start real work
+    startParsingThreads();
+
     IsolateWrapper isolateWrapper;
     Module& mainModule = (Module&)ModuleResolver::getModule(isolateWrapper, fs::current_path(), argPath, true);
 
     if (singleFile) {
         mainModule.analyze();
-        return EXIT_SUCCESS;
+    } else {
+        cout << "Resolving project imports..." << endl;
+        mainModule.resolveProjectImports(argPath); // Loads all the project modules (and other dependencies)
+        vector<Module*> projectModules = ModuleResolver::getLoadedProjectModules(argPath);
+        cout << "Starting analysis..." << endl;
+        for (Module* module : projectModules)
+            module->analyze();
     }
 
-    cout << "Resolving project imports..." << endl;
-    mainModule.resolveProjectImports(argPath); // Loads all the project modules (and other dependencies)
-    vector<Module*> projectModules = ModuleResolver::getLoadedProjectModules(argPath);
-    cout << "Starting analysis..." << endl;
-    for (Module* module : projectModules)
-        module->analyze();
+    // Cleanup
+    stopParsingThreads();
 
     return EXIT_SUCCESS;
 }
