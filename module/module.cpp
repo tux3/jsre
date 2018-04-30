@@ -34,7 +34,7 @@ Module::Module(IsolateWrapper& isolateWrapper, fs::path path)
 
     originalSource = readFileStr(path.c_str());
     //std::tie(transpiledSource, jast) = transpileScript(isolateWrapper, originalSource);
-    jast = transpileScript(isolateWrapper, originalSource);
+    auto jast = transpileScript(isolateWrapper, originalSource);
     ast = importBabylonAst(*this, jast);
     transpiledSource = stripFlowTypes(originalSource, *ast);
 }

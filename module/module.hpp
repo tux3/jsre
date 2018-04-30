@@ -46,7 +46,6 @@ private:
 private:
     std::filesystem::path path;
     std::string originalSource, transpiledSource;
-    nlohmann::json jast;
     AstRoot* ast;
     v8::Persistent<v8::Module> compiledModule;
     v8::Persistent<v8::Module> compiledThunkModule; //< ES6 thunk generated if this module doesn't use ES6 import/exports
