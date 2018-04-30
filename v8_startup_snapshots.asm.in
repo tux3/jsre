@@ -1,0 +1,11 @@
+; This file includes the v8 startup snapshots in the binary
+; Using snapshots saves hundreds of ms on startup when creating the isolate.
+global v8_startup_@SNAPSHOT_NAME@, v8_startup_@SNAPSHOT_NAME@_end
+default rel
+
+section .rodata
+
+v8_startup_@SNAPSHOT_NAME@:
+    incbin "@SNAPSHOT_BASE_PATH@/@SNAPSHOT_NAME@.bin"
+v8_startup_@SNAPSHOT_NAME@_end:
+

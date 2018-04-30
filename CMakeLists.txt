@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 3.2 FATAL_ERROR)
 project(jsre)
 
+# TODO: Make a half-hearted attempt at calling a FindV8.cmake or pkg-config
+set(V8_LIBS_DIR "/code/build/v8/v8/out.gn/x64.release")
+set(V8_INCLUDE_DIR "/code/build/v8/v8/include")
+
 ## Babel transpiler lib
 add_subdirectory(babel)
 
@@ -43,6 +47,23 @@ add_library(native_modules_js STATIC ${NATIVE_MODULE_JS_ASM_SRCS} ${NATIVE_MODUL
 # A bug in NASM requires a / at the end of include paths, and CMake always strips slashes, so we pass it as an opaque option
 target_compile_options(native_modules_js PRIVATE "-I${PROJECT_SOURCE_DIR}/module/native/")
 
+## v8 startup snapshots target
+function(add_v8_startup_snapshot basename_list)
+    set(SNAPSHOT_BASE_PATH ${V8_LIBS_DIR})
+    foreach(basename ${ARGV})
+        set(SNAPSHOT_NAME ${basename})
+        configure_file(${PROJECT_SOURCE_DIR}/v8_startup_snapshots.asm.in "${PROJECT_BINARY_DIR}/generated/snapshots/${basename}.asm")
+        # OBJECT_DEPENDS is necessary to have a dependency on the *.bin files, since they are passed in behind the scenes via incbin
+        set_source_files_properties("${PROJECT_BINARY_DIR}/generated/snapshots/${basename}.asm" PROPERTIES OBJECT_DEPENDS "${SNAPSHOT_BASE_PATH}/${basename}.bin")
+        list(APPEND STARTUP_SNAPSHOTS_ASM_SRCS "${PROJECT_BINARY_DIR}/generated/snapshots/${basename}.asm")
+    endforeach(basename)
+    set(STARTUP_SNAPSHOTS_ASM_SRCS "${STARTUP_SNAPSHOTS_ASM_SRCS}" PARENT_SCOPE)
+endfunction(add_v8_startup_snapshot)
+add_v8_startup_snapshot(natives_blob snapshot_blob)
+
+add_library(startup_snapshots STATIC "${STARTUP_SNAPSHOTS_ASM_SRCS}")
+# A bug in NASM requires a / at the end of include paths, and CMake always strips slashes, so we pass it as an opaque option
+target_compile_options(startup_snapshots PRIVATE "-I${V8_LIBS_DIR}/")
 
 ## Main project target
 function(add_headers_sources basename_list)
@@ -61,10 +82,6 @@ add_headers_sources(
     analyze/identresolution analyze/unused analyze/astqueries
 )
 
-# TODO: Make a half-hearted attempt at calling a FindV8.cmake or pkg-config
-set(V8_LIBS_DIR "/code/build/v8/v8/out.gn/x64.release")
-set(V8_INCLUDE_DIR "/code/build/v8/v8/include")
-
 find_library(V8_LIB_V8 NAMES v8 PATHS ${V8_LIBS_DIR})
 find_library(V8_LIB_BASE NAMES v8_libbase PATHS ${V8_LIBS_DIR})
 find_library(V8_LIB_PLATFORM NAMES v8_libplatform PATHS ${V8_LIBS_DIR})
@@ -74,6 +91,6 @@ find_library(ICUI18N_LIB NAMES icui18n)
 
 add_executable(${PROJECT_NAME} ${SRCS})
 target_include_directories(${PROJECT_NAME} PRIVATE ${V8_INCLUDE_DIR} ${PROJECT_SOURCE_DIR} ${PROJECT_BINARY_DIR}/generated)
-target_link_libraries(${PROJECT_NAME} PRIVATE babel native_modules_js ${V8_LIB_V8} ${V8_LIB_BASE} ${V8_LIB_PLATFORM} ${ICUUC_LIB} ${ICUI18N_LIB} "stdc++fs")
+target_link_libraries(${PROJECT_NAME} PRIVATE babel native_modules_js startup_snapshots ${V8_LIB_V8} ${V8_LIB_BASE} ${V8_LIB_PLATFORM} ${ICUUC_LIB} ${ICUI18N_LIB} "stdc++fs")
 set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD 17
                                                  CXX_STANDARD_REQUIRED 1)

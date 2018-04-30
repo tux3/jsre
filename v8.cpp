@@ -2,6 +2,13 @@
 #include <libplatform/libplatform.h>
 #include <string>
 
+extern "C" {
+extern const char v8_startup_natives_blob[];
+extern const char v8_startup_natives_blob_end;
+extern const char v8_startup_snapshot_blob[];
+extern const char v8_startup_snapshot_blob_end;
+}
+
 V8::V8()
     : platform(v8::platform::CreateDefaultPlatform())
 {
@@ -9,6 +16,14 @@ V8::V8()
     v8::V8::SetFlagsFromString(flags.c_str(), flags.length());
     v8::V8::InitializePlatform(platform.get());
     v8::V8::Initialize();
+
+    int v8_startup_snapshot_blob_size = static_cast<int>(&v8_startup_snapshot_blob_end - v8_startup_snapshot_blob);
+    v8::StartupData snapshotBlobStartupData{v8_startup_snapshot_blob, v8_startup_snapshot_blob_size};
+    v8::V8::SetSnapshotDataBlob(&snapshotBlobStartupData);
+
+    int v8_startup_natives_blob_size = static_cast<int>(&v8_startup_natives_blob_end - v8_startup_natives_blob);
+    v8::StartupData nativesBlobStartupData{v8_startup_natives_blob, v8_startup_natives_blob_size};
+    v8::V8::SetNativesDataBlob(&nativesBlobStartupData);
 
     create_params.array_buffer_allocator = v8::ArrayBuffer::Allocator::NewDefaultAllocator();
 }

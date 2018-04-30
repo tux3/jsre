@@ -8,4 +8,4 @@ is_component_build = true
 use_sysroot = false
 use_custom_libcxx = false
 v8_enable_i18n_support = false # Removes dependency on custom libicu
-v8_use_snapshot = false # Removes runtime dependency on the binary shapshot files
+v8_use_snapshot = true # Use binary shapshot files
