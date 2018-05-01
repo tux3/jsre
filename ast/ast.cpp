@@ -54,7 +54,7 @@ void AstNode::setParentOfChildren() {
 AstRoot::AstRoot(AstSourceSpan location, Module &parentModule, vector<AstNode*> body)
     : AstNode(location, AstNodeType::Root)
     , parentModule{ parentModule }
-    , body{ body }
+    , body{ move(body) }
 {
     setParentOfChildren();
 }
@@ -70,7 +70,7 @@ Module &AstRoot::getParentModule()
 
 Identifier::Identifier(AstSourceSpan location, string name, TypeAnnotation* typeAnnotation, bool optional)
     : AstNode(location, AstNodeType::Identifier)
-    , name{ name }
+    , name{ move(name) }
     , typeAnnotation{ typeAnnotation }
     , optional{ optional }
 {
@@ -94,7 +94,7 @@ bool Identifier::isOptional()
 
 RegExpLiteral::RegExpLiteral(AstSourceSpan location, string pattern, string flags)
     : AstNode(location, AstNodeType::RegExpLiteral)
-    , pattern{ pattern }
+    , pattern{ move(pattern) }
     , flags{ flags }
 {
     setParentOfChildren();
@@ -108,7 +108,7 @@ NullLiteral::NullLiteral(AstSourceSpan location)
 
 StringLiteral::StringLiteral(AstSourceSpan location, string value)
     : AstNode(location, AstNodeType::StringLiteral)
-    , value{ value }
+    , value{ move(value) }
 {
     setParentOfChildren();
 }
@@ -144,15 +144,15 @@ double NumericLiteral::getValue()
 
 TemplateLiteral::TemplateLiteral(AstSourceSpan location, std::vector<AstNode*> quasis, std::vector<AstNode*> expressions)
     : AstNode(location, AstNodeType::TemplateLiteral)
-    , quasis{ quasis }
-    , expressions{ expressions }
+    , quasis{ move(quasis) }
+    , expressions{ move(expressions) }
 {
     setParentOfChildren();
 }
 
 TemplateElement::TemplateElement(AstSourceSpan location, std::string rawValue, bool isTail)
     : AstNode(location, AstNodeType::TemplateElement)
-    , rawValue{ rawValue }
+    , rawValue{ move(rawValue) }
     , isTail{ isTail }
 {
     setParentOfChildren();
@@ -183,7 +183,7 @@ Identifier* ObjectProperty::getKey()
 
 ObjectMethod::ObjectMethod(AstSourceSpan location, AstNode* id, vector<AstNode*> params, AstNode* body, TypeParameterDeclaration* typeParameters,
                            TypeAnnotation* returnType, AstNode* key, ObjectMethod::Kind kind, bool isGenerator, bool isAsync, bool isComputed)
-    : Function(location, AstNodeType::ObjectMethod, id, params, body, typeParameters, returnType, isGenerator, isAsync)
+    : Function(location, AstNodeType::ObjectMethod, id, move(params), body, typeParameters, returnType, isGenerator, isAsync)
     , key{ key }
     , kind{ kind }
     , isComputed{ isComputed }
@@ -200,7 +200,7 @@ ExpressionStatement::ExpressionStatement(AstSourceSpan location, AstNode* expres
 
 BlockStatement::BlockStatement(AstSourceSpan location, std::vector<AstNode*> body)
     : AstNode(location, AstNodeType::BlockStatement)
-    , body{ body }
+    , body{ move(body) }
 {
     setParentOfChildren();
 }
@@ -266,7 +266,7 @@ IfStatement::IfStatement(AstSourceSpan location, AstNode* test, AstNode* consequ
 SwitchStatement::SwitchStatement(AstSourceSpan location, AstNode* discriminant, std::vector<AstNode*> cases)
     : AstNode(location, AstNodeType::SwitchStatement)
     , discriminant{ discriminant }
-    , cases{ cases }
+    , cases{ move(cases) }
 {
     setParentOfChildren();
 }
@@ -274,7 +274,7 @@ SwitchStatement::SwitchStatement(AstSourceSpan location, AstNode* discriminant, 
 SwitchCase::SwitchCase(AstSourceSpan location, AstNode* testOrDefault, std::vector<AstNode*> consequent)
     : AstNode(location, AstNodeType::SwitchCase)
     , testOrDefault{ testOrDefault }
-    , consequent{ consequent }
+    , consequent{ move(consequent) }
 {
     setParentOfChildren();
 }
@@ -382,7 +382,7 @@ Function::Function(AstSourceSpan location, AstNodeType type, AstNode* id, std::v
                    TypeParameterDeclaration* typeParameters, TypeAnnotation* returnType, bool generator, bool async)
     : AstNode(location, type)
     , id{ id }
-    , params{ params }
+    , params{ move(params) }
     , body{ body }
     , typeParameters{ typeParameters }
     , returnType{ returnType }
@@ -436,7 +436,7 @@ ThisExpression::ThisExpression(AstSourceSpan location)
 
 ArrowFunctionExpression::ArrowFunctionExpression(AstSourceSpan location, AstNode* id, vector<AstNode*> params, AstNode* body, TypeParameterDeclaration* typeParameters,
                                                  TypeAnnotation* returnType, bool isGenerator, bool isAsync, bool isExpression)
-    : Function(location, AstNodeType::ArrowFunctionExpression, id, params, body, typeParameters, returnType, isGenerator, isAsync)
+    : Function(location, AstNodeType::ArrowFunctionExpression, id, move(params), body, typeParameters, returnType, isGenerator, isAsync)
     , isExpression{ isExpression }
 {
     setParentOfChildren();
@@ -459,21 +459,21 @@ AwaitExpression::AwaitExpression(AstSourceSpan location, AstNode* argument)
 
 ArrayExpression::ArrayExpression(AstSourceSpan location, vector<AstNode*> elements)
     : AstNode(location, AstNodeType::ArrayExpression)
-    , elements{ elements }
+    , elements{ move(elements) }
 {
     setParentOfChildren();
 }
 
 ObjectExpression::ObjectExpression(AstSourceSpan location, vector<AstNode*> properties)
     : AstNode(location, AstNodeType::ObjectExpression)
-    , properties{ properties }
+    , properties{ move(properties) }
 {
     setParentOfChildren();
 }
 
 FunctionExpression::FunctionExpression(AstSourceSpan location, AstNode* id, vector<AstNode*> params, AstNode* body,
                                        TypeParameterDeclaration* typeParameters, TypeAnnotation* returnType, bool isGenerator, bool isAsync)
-    : Function(location, AstNodeType::FunctionExpression, id, params, body, typeParameters, returnType, isGenerator, isAsync)
+    : Function(location, AstNodeType::FunctionExpression, id, move(params), body, typeParameters, returnType, isGenerator, isAsync)
 {
     setParentOfChildren();
 }
@@ -555,7 +555,7 @@ ConditionalExpression::ConditionalExpression(AstSourceSpan location, AstNode* te
 }
 
 CallExpression::CallExpression(AstSourceSpan location, AstNode* callee, vector<AstNode*> arguments)
-    : CallExpression(location, AstNodeType::CallExpression, callee, arguments)
+    : CallExpression(location, AstNodeType::CallExpression, callee, move(arguments))
 {
     setParentOfChildren();
 }
@@ -568,19 +568,19 @@ const std::vector<AstNode *> &CallExpression::getArguments()
 CallExpression::CallExpression(AstSourceSpan location, AstNodeType type, AstNode* callee, vector<AstNode*> arguments)
     : AstNode(location, type)
     , callee{ callee }
-    , arguments{ arguments }
+    , arguments{ move(arguments) }
 {
 }
 
 NewExpression::NewExpression(AstSourceSpan location, AstNode* callee, vector<AstNode*> arguments)
-    : CallExpression(location, AstNodeType::NewExpression, callee, arguments)
+    : CallExpression(location, AstNodeType::NewExpression, callee, move(arguments))
 {
     setParentOfChildren();
 }
 
 SequenceExpression::SequenceExpression(AstSourceSpan location, std::vector<AstNode*> expressions)
     : AstNode(location, AstNodeType::SequenceExpression)
-    , expressions{ expressions }
+    , expressions{ move(expressions) }
 {
     setParentOfChildren();
 }
@@ -600,7 +600,7 @@ Class::Class(AstSourceSpan location, AstNodeType type, AstNode* id, AstNode* sup
     , body{ body }
     , typeParameters{ typeParameters }
     , superTypeParameters{ superTypeParameters }
-    , implements{ implements }
+    , implements{ move(implements) }
 {
 }
 
@@ -628,7 +628,7 @@ ClassExpression::ClassExpression(AstSourceSpan location, AstNode* id, AstNode* s
 
 ClassBody::ClassBody(AstSourceSpan location, std::vector<AstNode*> body)
     : AstNode(location, AstNodeType::ClassBody)
-    , body{ body }
+    , body{ move(body) }
 {
     setParentOfChildren();
 }
@@ -636,7 +636,7 @@ ClassBody::ClassBody(AstSourceSpan location, std::vector<AstNode*> body)
 ClassMethod::ClassMethod(AstSourceSpan location, AstNode* id, std::vector<AstNode*> params, AstNode* body, AstNode* key,
                          TypeParameterDeclaration* typeParameters, TypeAnnotation* returnType,
                          ClassMethod::Kind kind, bool isGenerator, bool isAsync, bool isComputed, bool isStatic)
-    : Function(location, AstNodeType::ClassMethod, id, params, body, typeParameters, returnType, isGenerator, isAsync)
+    : Function(location, AstNodeType::ClassMethod, id, move(params), body, typeParameters, returnType, isGenerator, isAsync)
     , key{ key }
     , kind{ kind }
     , isComputed{ isComputed }
@@ -653,7 +653,7 @@ Identifier *ClassMethod::getKey()
 ClassPrivateMethod::ClassPrivateMethod(AstSourceSpan location, AstNode* id, std::vector<AstNode*> params, AstNode* body, AstNode* key,
                                        TypeParameterDeclaration* typeParameters, TypeAnnotation* returnType,
                                        ClassPrivateMethod::Kind kind, bool isGenerator, bool isAsync, bool isStatic)
-    : Function(location, AstNodeType::ClassPrivateMethod, id, params, body, typeParameters, returnType, isGenerator, isAsync)
+    : Function(location, AstNodeType::ClassPrivateMethod, id, move(params), body, typeParameters, returnType, isGenerator, isAsync)
     , key{ key }
     , kind{ kind }
     , isStatic{ isStatic }
@@ -701,21 +701,21 @@ Identifier* ClassPrivateProperty::getKey()
 
 ClassDeclaration::ClassDeclaration(AstSourceSpan location, AstNode* id, AstNode* superClass, AstNode* body,
                                    TypeParameterDeclaration *typeParameters, TypeParameterInstantiation *superTypeParameters, std::vector<ClassImplements*> implements)
-    : Class(location, AstNodeType::ClassDeclaration, id, superClass, body, typeParameters, superTypeParameters, implements)
+    : Class(location, AstNodeType::ClassDeclaration, id, superClass, body, typeParameters, superTypeParameters, move(implements))
 {
     setParentOfChildren();
 }
 
 FunctionDeclaration::FunctionDeclaration(AstSourceSpan location, AstNode* id, vector<AstNode*> params, AstNode* body,
                                          TypeParameterDeclaration* typeParameters, TypeAnnotation* returnType, bool isGenerator, bool isAsync)
-    : Function(location, AstNodeType::FunctionDeclaration, id, params, body, typeParameters, returnType, isGenerator, isAsync)
+    : Function(location, AstNodeType::FunctionDeclaration, id, move(params), body, typeParameters, returnType, isGenerator, isAsync)
 {
     setParentOfChildren();
 }
 
 VariableDeclaration::VariableDeclaration(AstSourceSpan location, vector<AstNode*> declarators, Kind kind)
     : AstNode(location, AstNodeType::VariableDeclaration)
-    , declarators{ declarators }
+    , declarators{ move(declarators) }
     , kind{ kind }
 {
     setParentOfChildren();
@@ -753,7 +753,7 @@ SpreadElement::SpreadElement(AstSourceSpan location, AstNode* argument)
 
 ObjectPattern::ObjectPattern(AstSourceSpan location, std::vector<AstNode*> properties, TypeAnnotation* typeAnnotation)
     : AstNode(location, AstNodeType::ObjectPattern)
-    , properties{ properties }
+    , properties{ move(properties) }
     , typeAnnotation{ typeAnnotation }
 {
     setParentOfChildren();
@@ -766,7 +766,7 @@ const std::vector<ObjectProperty *> &ObjectPattern::getProperties()
 
 ArrayPattern::ArrayPattern(AstSourceSpan location, std::vector<AstNode*> elements)
     : AstNode(location, AstNodeType::ArrayPattern)
-    , elements{ elements }
+    , elements{ move(elements) }
 {
     setParentOfChildren();
 }
@@ -817,7 +817,7 @@ MetaProperty::MetaProperty(AstSourceSpan location, AstNode* meta, AstNode* prope
 
 ImportDeclaration::ImportDeclaration(AstSourceSpan location, std::vector<AstNode*> specifiers, AstNode* source, Kind kind)
     : AstNode(location, AstNodeType::ImportDeclaration)
-    , specifiers{ specifiers }
+    , specifiers{ move(specifiers) }
     , source{ source }
     , kind{ kind }
 {
@@ -896,7 +896,7 @@ ExportNamedDeclaration::ExportNamedDeclaration(AstSourceSpan location, AstNode* 
     : AstNode(location, AstNodeType::ExportNamedDeclaration)
     , declaration{ declaration }
     , source{ source }
-    , specifiers{ specifiers }
+    , specifiers{ move(specifiers) }
     , kind{ kind }
 {
     setParentOfChildren();
@@ -1017,14 +1017,14 @@ NullableTypeAnnotation::NullableTypeAnnotation(AstSourceSpan location, AstNode* 
 
 TupleTypeAnnotation::TupleTypeAnnotation(AstSourceSpan location,std::vector<AstNode*> types)
     : AstNode(location, AstNodeType::TupleTypeAnnotation)
-    , types{ types }
+    , types{ move(types) }
 {
     setParentOfChildren();
 }
 
 UnionTypeAnnotation::UnionTypeAnnotation(AstSourceSpan location,std::vector<AstNode*> types)
     : AstNode(location, AstNodeType::UnionTypeAnnotation)
-    , types{ types }
+    , types{ move(types) }
 {
     setParentOfChildren();
 }
@@ -1044,7 +1044,7 @@ NumberLiteralTypeAnnotation::NumberLiteralTypeAnnotation(AstSourceSpan location,
 
 StringLiteralTypeAnnotation::StringLiteralTypeAnnotation(AstSourceSpan location, string value)
     : AstNode(location, AstNodeType::StringLiteralTypeAnnotation)
-    , value{ value }
+    , value{ move(value) }
 {
     setParentOfChildren();
 }
@@ -1168,14 +1168,14 @@ AstNode *TypeAlias::getRight()
 
 TypeParameterInstantiation::TypeParameterInstantiation(AstSourceSpan location, std::vector<AstNode *> params)
     : AstNode(location, AstNodeType::TypeParameterInstantiation)
-    , params{ params }
+    , params{ move(params) }
 {
     setParentOfChildren();
 }
 
 TypeParameterDeclaration::TypeParameterDeclaration(AstSourceSpan location, std::vector<AstNode *> params)
     : AstNode(location, AstNodeType::TypeParameterDeclaration)
-    , params{ params }
+    , params{ move(params) }
 {
     setParentOfChildren();
 }
@@ -1187,7 +1187,7 @@ const std::vector<TypeParameter *> &TypeParameterDeclaration::getParams()
 
 TypeParameter::TypeParameter(AstSourceSpan location, std::string name)
     : AstNode(location, AstNodeType::TypeParameter)
-    , name{ new Identifier(location, name, nullptr, false) }
+    , name{ new Identifier(location, move(name), nullptr, false) }
 {
     setParentOfChildren();
 }

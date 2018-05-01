@@ -3,6 +3,7 @@
 
 #include "ast/location.hpp"
 #include <json.hpp>
+#include <v8.h>
 
 #define IMPORTED_NODE_LIST(X)       \
     X(Identifier)                   \
@@ -118,9 +119,9 @@ class AstRoot;
 class AstNode;
 class Module;
 
-AstRoot* importBabylonAst(Module& parentModule, const nlohmann::json& ast);
-AstNode* importNode(const nlohmann::json& node);
-AstNode* importNodeOrNullptr(const nlohmann::json& node, const char* name);
-AstSourceSpan importLocation(const nlohmann::json& node);
+AstRoot* importBabylonAst(Module& parentModule, v8::Local<v8::Object> astObj);
+AstNode* importNode(const v8::Local<v8::Object>& node);
+AstNode* importChildOrNullptr(const v8::Local<v8::Object>& node, const char* name);
+AstSourceSpan importLocation(const v8::Local<v8::Object>& node);
 
 #endif // IMPORT_HPP

@@ -6,320 +6,398 @@
 #include <unordered_map>
 
 using namespace std;
-using json = nlohmann::json;
+using namespace v8;
 
 class Module;
 
-#define X(NODE) AstNode* import##NODE(const json&, AstSourceSpan);
+#define X(NODE) AstNode* import##NODE(const Local<Object>&, AstSourceSpan&);
 IMPORTED_NODE_LIST(X)
 #undef X
 
 #define X(NODE) { #NODE, import##NODE },
-static const unordered_map<string, AstNode* (*)(const json&, AstSourceSpan)> importFunctions = {
+static const unordered_map<string, AstNode* (*)(const Local<Object>&, AstSourceSpan&)> importFunctions = {
     IMPORTED_NODE_LIST(X)
 };
 #undef X
 
-AstRoot* importBabylonAst(Module& parentModule, const json& jast)
+static bool hasKey(const Local<Object>& node, const char* key)
 {
-    const json& program = jast["program"];
-    assert(program["type"] == "Program");
-
-    vector<AstNode*> bodyNodes;
-    for (const auto& jnode : program["body"])
-        bodyNodes.push_back(importNode(jnode));
-    auto loc = importLocation(program);
-
-    return new AstRoot(loc, parentModule, bodyNodes);
+    Isolate* isolate = node->GetIsolate();
+    auto keyStr = v8::String::NewFromOneByte(isolate, (uint8_t*)key, NewStringType::kInternalized).ToLocalChecked();
+    return node->HasRealNamedProperty(isolate->GetCurrentContext(), keyStr).FromJust();
 }
 
-AstNode* importNode(const json& node)
+static Local<Value> getVal(const Local<Object>& node, const char* key)
 {
-    auto typeIt = node.find("type");
-    if (typeIt == node.end())
-        throw runtime_error("Trying to import AST node with no type!");
-    auto funIt = importFunctions.find(*typeIt);
+    // TODO: We may want to create a string from OneByte instead of Utf8, if it's any faster. We can guarantee that AST node keys are ASCII anyways
+    Isolate* isolate = node->GetIsolate();
+    auto keyStr = v8::String::NewFromOneByte(isolate, (uint8_t*)key, NewStringType::kInternalized).ToLocalChecked();
+    auto val = node->GetRealNamedProperty(isolate->GetCurrentContext(), keyStr).ToLocalChecked();
+    assert(!val->IsUndefined());
+    return val;
+}
+
+static optional<Local<Value>> tryGetVal(const Local<Object>& node, const char* key)
+{
+    Isolate* isolate = node->GetIsolate();
+    auto keyStr = v8::String::NewFromOneByte(isolate, (uint8_t*)key, NewStringType::kInternalized).ToLocalChecked();
+    auto val = node->GetRealNamedProperty(isolate->GetCurrentContext(), keyStr);
+    if (val.IsEmpty())
+        return nullopt;
+    return val.ToLocalChecked();
+}
+
+static Local<Object> getObj(const Local<Object>& node, const char* key)
+{
+    auto val = getVal(node, key);
+    assert(val->IsObject());
+    return val.As<Object>();
+}
+
+static string getStr(const Local<Object>& node, const char* key)
+{
+    Isolate* isolate = node->GetIsolate();
+    auto val = getVal(node, key);
+    assert(val->IsString());
+    String::Utf8Value strVal(isolate, val.As<String>());
+    return string{*strVal};
+}
+
+static double getNumber(const Local<Object>& node, const char* key)
+{
+    Isolate* isolate = node->GetIsolate();
+    auto val = getVal(node, key);
+    assert(val->IsNumber());
+    return val->NumberValue(isolate->GetCurrentContext()).FromJust();
+}
+
+static optional<string> tryGetStr(const Local<Object>& node, const char* key)
+{
+    Isolate* isolate = node->GetIsolate();
+    auto val = getVal(node, key);
+    if (val->IsNullOrUndefined())
+        return nullopt;
+    assert(val->IsString());
+    String::Utf8Value strVal(isolate, val.As<String>());
+    return string{*strVal};
+}
+
+static bool getBool(const Local<Object>& node, const char* key)
+{
+    Isolate* isolate = node->GetIsolate();
+    auto val = getVal(node, key);
+    assert(val->IsBoolean());
+    return val->BooleanValue(isolate->GetCurrentContext()).FromJust();
+}
+
+static optional<bool> tryGetBool(const Local<Object>& node, const char* key)
+{
+    Isolate* isolate = node->GetIsolate();
+    auto maybeVal = tryGetVal(node, key);
+    if (!maybeVal.has_value())
+        return nullopt;
+    const auto& val = maybeVal.value();
+    assert(val->IsBoolean());
+    return val->BooleanValue(isolate->GetCurrentContext()).FromJust();
+}
+
+AstNode* importNode(const Local<Object>& node)
+{
+    auto val = getVal(node, "type");
+    assert(val->IsString());
+    String::Utf8Value type(node->GetIsolate(), val.As<String>());
+    auto funIt = importFunctions.find(*type);
     if (funIt == importFunctions.end())
-        throw runtime_error("Unknown node of type " + typeIt->get<string>() + " in Babylon AST");
+        throw runtime_error("Unknown node of type "s + *type + " in Babylon AST");
     auto loc = importLocation(node);
     return funIt->second(node, loc);
 }
 
-AstNode* importNodeOrNullptr(const json& node, const char* name)
+AstNode* importChild(const Local<Object>& node, const char* name)
 {
-    auto nodeIt = node.find(name);
-    if (nodeIt == node.end())
-        return nullptr;
-    else if (nodeIt->type() == json::value_t::null)
-        return nullptr;
-    else
-        return importNode(*nodeIt);
+    return importNode(getObj(node, name));
 }
 
-AstSourceSpan importLocation(const json& node)
+AstNode* importChildOrNullptr(const Local<Object>& node, const char* name)
 {
-    const json& nodeLoc = node["loc"];
-    unsigned beginOff = node["start"];
-    unsigned beginLine = nodeLoc["start"]["line"];
-    unsigned beginCol = nodeLoc["start"]["column"];
-    unsigned endOff = node["end"];
-    unsigned endLine = nodeLoc["end"]["line"];
-    unsigned endCol = nodeLoc["end"]["column"];
+    auto childNode = tryGetVal(node, name);
+    if (!childNode.has_value())
+        return nullptr;
+    else if (childNode.value()->IsNull())
+        return nullptr;
+    else
+        return importNode(childNode->As<Object>());
+}
+
+template <class T = AstNode>
+vector<T*> importChildArray(const Local<Object>& node, const char* name)
+{
+    auto arrVal = getVal(node, name);
+    assert(arrVal->IsArray());
+    auto arr = arrVal.As<Array>();
+    auto len = arr->Length();
+
+    vector<T*> result;
+    result.reserve(len);
+    for (int  i=len-1; i>=0; --i) {
+        auto elem = importNode(arr->Get(i).As<Object>());
+        result.push_back(reinterpret_cast<T*>(elem));
+    }
+
+    return result;
+}
+
+AstRoot* importBabylonAst(::Module& parentModule, v8::Local<v8::Object> astObj)
+{
+    auto program = getObj(astObj, "program");
+    assert(getStr(program, "type") == "Program");
+
+    auto loc = importLocation(program);
+    return new AstRoot(loc, parentModule, importChildArray(program, "body"));
+}
+
+AstSourceSpan importLocation(const Local<Object>& node)
+{
+    Local<Object> nodeLoc = getObj(node, "loc");
+    unsigned beginOff = getNumber(node, "start");
+    unsigned endOff = getNumber(node, "end");
+    Local<Object> nodeLocStart = getObj(nodeLoc, "start");
+    unsigned beginLine = getNumber(nodeLocStart, "line");
+    unsigned beginCol = getNumber(nodeLocStart, "column");
+    Local<Object> nodeLocEnd = getObj(nodeLoc, "end");
+    unsigned endLine = getNumber(nodeLocEnd, "line");
+    unsigned endCol = getNumber(nodeLocEnd, "column");
     return {
         {beginOff, beginLine, beginCol},
         {endOff, endLine, endCol}
     };
 }
 
-AstNode* importIdentifier(const json& node, AstSourceSpan loc)
+AstNode* importIdentifier(const Local<Object>& node, AstSourceSpan& loc)
 {
     bool isOptional = false;
-    if (auto it = node.find("optional"); it != node.end())
-        isOptional = (bool)*it;
+    if (auto it = tryGetBool(node, "optional"); it.has_value())
+        isOptional = *it;
 
-    return new Identifier(loc, node["name"].get<string>(), (TypeAnnotation*)importNodeOrNullptr(node, "typeAnnotation"), isOptional);
+    return new Identifier(loc, getStr(node, "name"), (TypeAnnotation*)importChildOrNullptr(node, "typeAnnotation"), isOptional);
 }
 
-AstNode* importStringLiteral(const json& node, AstSourceSpan loc)
+AstNode* importStringLiteral(const Local<Object>& node, AstSourceSpan& loc)
 {
-    return new StringLiteral(loc, node["value"].get<string>());
+    return new StringLiteral(loc, getStr(node, "value"));
 }
 
-AstNode* importRegExpLiteral(const json& node, AstSourceSpan loc)
+AstNode* importRegExpLiteral(const Local<Object>& node, AstSourceSpan& loc)
 {
-    return new RegExpLiteral(loc, node["pattern"].get<string>(), node["flags"].get<string>());
+    return new RegExpLiteral(loc, getStr(node, "pattern"), getStr(node, "flags"));
 }
 
-AstNode* importNullLiteral(const json& node, AstSourceSpan loc)
+AstNode* importNullLiteral(const Local<Object>& node, AstSourceSpan& loc)
 {
     return new NullLiteral(loc);
 }
 
-AstNode* importBooleanLiteral(const json& node, AstSourceSpan loc)
+AstNode* importBooleanLiteral(const Local<Object>& node, AstSourceSpan& loc)
 {
-    return new BooleanLiteral(loc, (bool)node["value"]);
+    return new BooleanLiteral(loc, getBool(node, "value"));
 }
 
-AstNode* importNumericLiteral(const json& node, AstSourceSpan loc)
+AstNode* importNumericLiteral(const Local<Object>& node, AstSourceSpan& loc)
 {
-    return new NumericLiteral(loc, (double)node["value"]);
+    return new NumericLiteral(loc, getNumber(node, "value"));
 }
 
-AstNode* importTemplateLiteral(const json& node, AstSourceSpan loc)
+AstNode* importTemplateLiteral(const Local<Object>& node, AstSourceSpan& loc)
 {
-    vector<AstNode*> quasis;
-    for (auto&& child : node["quasis"])
-        quasis.push_back(importNode(child));
-    vector<AstNode*> expressions;
-    for (auto&& child : node["expressions"])
-        expressions.push_back(importNode(child));
-    return new TemplateLiteral(loc, quasis, expressions);
+    return new TemplateLiteral(loc, importChildArray(node, "quasis"), importChildArray(node, "expressions"));
 }
 
-AstNode* importTemplateElement(const json& node, AstSourceSpan loc)
+AstNode* importTemplateElement(const Local<Object>& node, AstSourceSpan& loc)
 {
-    return new TemplateElement(loc, node["value"]["raw"].get<string>(), (bool)node["tail"]);
+    return new TemplateElement(loc, getStr(getObj(node, "value"), "raw"), getBool(node, "tail"));
 }
 
-AstNode* importTaggedTemplateExpression(const json& node, AstSourceSpan loc)
+AstNode* importTaggedTemplateExpression(const Local<Object>& node, AstSourceSpan& loc)
 {
-    return new TaggedTemplateExpression(loc, importNode(node["tag"]), importNode(node["quasi"]));
+    return new TaggedTemplateExpression(loc, importChild(node, "tag"), importChild(node, "quasi"));
 }
 
-AstNode* importExpressionStatement(const json& node, AstSourceSpan loc)
+AstNode* importExpressionStatement(const Local<Object>& node, AstSourceSpan& loc)
 {
-    return new ExpressionStatement(loc, importNode(node["expression"]));
+    return new ExpressionStatement(loc, importChild(node, "expression"));
 }
 
-AstNode* importEmptyStatement(const json& node, AstSourceSpan loc)
+AstNode* importEmptyStatement(const Local<Object>& node, AstSourceSpan& loc)
 {
     return new EmptyStatement(loc);
 }
 
-AstNode* importWithStatement(const json& node, AstSourceSpan loc)
+AstNode* importWithStatement(const Local<Object>& node, AstSourceSpan& loc)
 {
-    return new WithStatement(loc, importNode(node["object"]), importNode(node["body"]));
+    return new WithStatement(loc, importChild(node, "object"), importChild(node, "body"));
 }
 
-AstNode* importDebuggerStatement(const json& node, AstSourceSpan loc)
+AstNode* importDebuggerStatement(const Local<Object>& node, AstSourceSpan& loc)
 {
     return new DebuggerStatement(loc);
 }
 
-AstNode* importReturnStatement(const json& node, AstSourceSpan loc)
+AstNode* importReturnStatement(const Local<Object>& node, AstSourceSpan& loc)
 {
-    AstNode* argument = node["argument"] != nullptr ? importNode(node["argument"]) : nullptr;
+    AstNode* argument = importChildOrNullptr(node, "argument");
     return new ReturnStatement(loc, argument);
 }
 
-AstNode* importLabeledStatement(const json& node, AstSourceSpan loc)
+AstNode* importLabeledStatement(const Local<Object>& node, AstSourceSpan& loc)
 {
-    return new LabeledStatement(loc, importNode(node["label"]), importNode(node["body"]));
+    return new LabeledStatement(loc, importChild(node, "label"), importChild(node, "body"));
 }
 
-AstNode* importBreakStatement(const json& node, AstSourceSpan loc)
+AstNode* importBreakStatement(const Local<Object>& node, AstSourceSpan& loc)
 {
-    AstNode* label = node["label"] != nullptr ? importNode(node["label"]) : nullptr;
+    AstNode* label = importChildOrNullptr(node, "label");
     return new BreakStatement(loc, label);
 }
 
-AstNode* importContinueStatement(const json& node, AstSourceSpan loc)
+AstNode* importContinueStatement(const Local<Object>& node, AstSourceSpan& loc)
 {
-    AstNode* label = node["label"] != nullptr ? importNode(node["label"]) : nullptr;
+    AstNode* label = importChildOrNullptr(node, "label");
     return new ContinueStatement(loc, label);
 }
 
-AstNode* importIfStatement(const json& node, AstSourceSpan loc)
+AstNode* importIfStatement(const Local<Object>& node, AstSourceSpan& loc)
 {
-    AstNode* alternate = node["alternate"] != nullptr ? importNode(node["alternate"]) : nullptr;
-    return new IfStatement(loc, importNode(node["test"]), importNode(node["consequent"]), alternate);
+    AstNode* alternate = importChildOrNullptr(node, "alternate");
+    return new IfStatement(loc, importChild(node, "test"), importChild(node, "consequent"), alternate);
 }
 
-AstNode* importSwitchStatement(const json& node, AstSourceSpan loc)
+AstNode* importSwitchStatement(const Local<Object>& node, AstSourceSpan& loc)
 {
-    vector<AstNode*> cases;
-    for (auto&& child : node["cases"])
-        cases.push_back(importNode(child));
-    return new SwitchStatement(loc, importNode(node["discriminant"]), cases);
+    return new SwitchStatement(loc, importChild(node, "discriminant"), importChildArray(node, "cases"));
 }
 
-AstNode* importSwitchCase(const json& node, AstSourceSpan loc)
+AstNode* importSwitchCase(const Local<Object>& node, AstSourceSpan& loc)
 {
-    AstNode* test = node["test"] != nullptr ? importNode(node["test"]) : nullptr;
-    vector<AstNode*> consequent;
-    for (auto&& child : node["consequent"])
-        consequent.push_back(importNode(child));
-    return new SwitchCase(loc, test, consequent);
+    AstNode* test = importChildOrNullptr(node, "test");
+    return new SwitchCase(loc, test, importChildArray(node, "consequent"));
 }
 
-AstNode* importThrowStatement(const json& node, AstSourceSpan loc)
+AstNode* importThrowStatement(const Local<Object>& node, AstSourceSpan& loc)
 {
-    return new ThrowStatement(loc, importNode(node["argument"]));
+    return new ThrowStatement(loc, importChild(node, "argument"));
 }
 
-AstNode* importTryStatement(const json& node, AstSourceSpan loc)
+AstNode* importTryStatement(const Local<Object>& node, AstSourceSpan& loc)
 {
-    AstNode* handler = node["handler"] != nullptr ? importNode(node["handler"]) : nullptr;
-    AstNode* finalizer = node["finalizer"] != nullptr ? importNode(node["finalizer"]) : nullptr;
-    return new TryStatement(loc, importNode(node["block"]), handler, finalizer);
+    AstNode* handler = importChildOrNullptr(node, "handler");
+    AstNode* finalizer = importChildOrNullptr(node, "finalizer");
+    return new TryStatement(loc, importChild(node, "block"), handler, finalizer);
 }
 
-AstNode* importCatchClause(const json& node, AstSourceSpan loc)
+AstNode* importCatchClause(const Local<Object>& node, AstSourceSpan& loc)
 {
-    AstNode* param = node["param"] != nullptr ? importNode(node["param"]) : nullptr;
-    return new CatchClause(loc, param, importNode(node["body"]));
+    AstNode* param = importChildOrNullptr(node, "param");
+    return new CatchClause(loc, param, importChild(node, "body"));
 }
 
-AstNode* importWhileStatement(const json& node, AstSourceSpan loc)
+AstNode* importWhileStatement(const Local<Object>& node, AstSourceSpan& loc)
 {
-    return new WhileStatement(loc, importNode(node["test"]), importNode(node["body"]));
+    return new WhileStatement(loc, importChild(node, "test"), importChild(node, "body"));
 }
 
-AstNode* importDoWhileStatement(const json& node, AstSourceSpan loc)
+AstNode* importDoWhileStatement(const Local<Object>& node, AstSourceSpan& loc)
 {
-    return new DoWhileStatement(loc, importNode(node["test"]), importNode(node["body"]));
+    return new DoWhileStatement(loc, importChild(node, "test"), importChild(node, "body"));
 }
 
-AstNode* importForStatement(const json& node, AstSourceSpan loc)
+AstNode* importForStatement(const Local<Object>& node, AstSourceSpan& loc)
 {
-    AstNode* init = node["init"] != nullptr ? importNode(node["init"]) : nullptr;
-    AstNode* test = node["test"] != nullptr ? importNode(node["test"]) : nullptr;
-    AstNode* update = node["update"] != nullptr ? importNode(node["update"]) : nullptr;
-    return new ForStatement(loc, init, test, update, importNode(node["body"]));
+    AstNode* init = importChildOrNullptr(node, "init");
+    AstNode* test = importChildOrNullptr(node, "test");
+    AstNode* update = importChildOrNullptr(node, "update");
+    return new ForStatement(loc, init, test, update, importChild(node, "body"));
 }
 
-AstNode* importForInStatement(const json& node, AstSourceSpan loc)
+AstNode* importForInStatement(const Local<Object>& node, AstSourceSpan& loc)
 {
-    return new ForInStatement(loc, importNode(node["left"]), importNode(node["right"]), importNode(node["body"]));
+    return new ForInStatement(loc, importChild(node, "left"), importChild(node, "right"), importChild(node, "body"));
 }
 
-AstNode* importForOfStatement(const json& node, AstSourceSpan loc)
+AstNode* importForOfStatement(const Local<Object>& node, AstSourceSpan& loc)
 {
     bool await = false;
-    if (auto it = node.find("await"); it != node.end())
-        await = (bool)*it;
-    return new ForOfStatement(loc, importNode(node["left"]), importNode(node["right"]), importNode(node["body"]), await);
+    if (auto it = tryGetBool(node, "await"); it.has_value())
+        await = *it;
+    return new ForOfStatement(loc, importChild(node, "left"), importChild(node, "right"), importChild(node, "body"), await);
 }
 
-AstNode* importBlockStatement(const json& node, AstSourceSpan loc)
+AstNode* importBlockStatement(const Local<Object>& node, AstSourceSpan& loc)
 {
-    vector<AstNode*> body;
-    for (auto&& child : node["body"])
-        body.push_back(importNode(child));
-    return new BlockStatement(loc, body);
+    return new BlockStatement(loc, importChildArray(node, "body"));
 }
 
-AstNode* importSuper(const json&, AstSourceSpan loc)
+AstNode* importSuper(const Local<Object>&, AstSourceSpan& loc)
 {
     return new Super(loc);
 }
 
-AstNode* importImport(const json&, AstSourceSpan loc)
+AstNode* importImport(const Local<Object>&, AstSourceSpan& loc)
 {
     return new Import(loc);
 }
 
-AstNode* importThisExpression(const json&, AstSourceSpan loc)
+AstNode* importThisExpression(const Local<Object>&, AstSourceSpan& loc)
 {
     return new ThisExpression(loc);
 }
 
-AstNode* importArrowFunctionExpression(const json& node, AstSourceSpan loc)
+AstNode* importArrowFunctionExpression(const Local<Object>& node, AstSourceSpan& loc)
 {
-    AstNode* id = node["id"] != nullptr ? importNode(node["id"]) : nullptr;
-    vector<AstNode*> params;
-    for (auto&& child : node["params"])
-        params.push_back(importNode(child));
+    AstNode* id = importChildOrNullptr(node, "id");
     bool isExpression;
-    if (auto it = node.find("expression"); it != node.end())
-        isExpression = (bool)*it;
-    return new ArrowFunctionExpression(loc, id, params, importNode(node["body"]),
-                                        (TypeParameterDeclaration*)importNodeOrNullptr(node, "typeParameters"),
-                                        (TypeAnnotation*)importNodeOrNullptr(node, "returnType"),
-                                        (bool)node["generator"], (bool)node["async"], isExpression);
+    if (auto it = tryGetBool(node, "expression"); it.has_value())
+        isExpression = *it;
+    return new ArrowFunctionExpression(loc, id, importChildArray(node, "params"), importChild(node, "body"),
+                                        (TypeParameterDeclaration*)importChildOrNullptr(node, "typeParameters"),
+                                        (TypeAnnotation*)importChildOrNullptr(node, "returnType"),
+                                        getBool(node, "generator"), getBool(node, "async"), isExpression);
 }
 
-AstNode* importYieldExpression(const json& node, AstSourceSpan loc)
+AstNode* importYieldExpression(const Local<Object>& node, AstSourceSpan& loc)
 {
-    AstNode* argument = node["argument"] != nullptr ? importNode(node["argument"]) : nullptr;
-    return new YieldExpression(loc, argument, (bool)node["delegate"]);
+    AstNode* argument = importChildOrNullptr(node, "argument");
+    return new YieldExpression(loc, argument, getBool(node, "delegate"));
 }
 
-AstNode* importAwaitExpression(const json& node, AstSourceSpan loc)
+AstNode* importAwaitExpression(const Local<Object>& node, AstSourceSpan& loc)
 {
-    AstNode* argument = node["argument"] != nullptr ? importNode(node["argument"]) : nullptr;
+    AstNode* argument = importChildOrNullptr(node, "argument");
     return new AwaitExpression(loc, argument);
 }
 
-AstNode* importArrayExpression(const json& node, AstSourceSpan loc)
+AstNode* importArrayExpression(const Local<Object>& node, AstSourceSpan& loc)
 {
-    vector<AstNode*> elements;
-    for (auto&& child : node["elements"])
-        elements.push_back(importNode(child));
-    return new ArrayExpression(loc, elements);
+    return new ArrayExpression(loc, importChildArray(node, "elements"));
 }
 
-AstNode* importObjectExpression(const json& node, AstSourceSpan loc)
+AstNode* importObjectExpression(const Local<Object>& node, AstSourceSpan& loc)
 {
-    vector<AstNode*> props;
-    for (auto&& prop : node["properties"])
-        props.push_back(importNode(prop));
-    return new ObjectExpression(loc, props);
+    return new ObjectExpression(loc, importChildArray(node, "properties"));
 }
 
-AstNode* importObjectProperty(const json& node, AstSourceSpan loc)
+AstNode* importObjectProperty(const Local<Object>& node, AstSourceSpan& loc)
 {
-    return new ObjectProperty(loc, importNode(node["key"]),
-        importNode(node["value"]),
-        node["shorthand"],
-        node["computed"]);
+    return new ObjectProperty(loc, importChild(node, "key"),
+        importChild(node, "value"),
+        getBool(node, "shorthand"),
+        getBool(node, "computed"));
 }
 
-AstNode* importObjectMethod(const json& node, AstSourceSpan loc)
+AstNode* importObjectMethod(const Local<Object>& node, AstSourceSpan& loc)
 {
     using Kind = ObjectMethod::Kind;
     Kind kind;
-    string kindStr = node["kind"];
+    string kindStr = getStr(node, "kind");
     if (kindStr == "method")
         kind = Kind::Method;
     else if (kindStr == "get")
@@ -329,33 +407,27 @@ AstNode* importObjectMethod(const json& node, AstSourceSpan loc)
     else
         throw runtime_error("Unknown private class method declaration kind " + kindStr);
 
-    AstNode* id = node["id"] != nullptr ? importNode(node["id"]) : nullptr;
-    vector<AstNode*> params;
-    for (auto&& child : node["params"])
-        params.push_back(importNode(child));
-    return new ObjectMethod(loc, id, params, importNode(node["body"]),
-                            (TypeParameterDeclaration*)importNodeOrNullptr(node, "typeParameters"),
-                            (TypeAnnotation*)importNodeOrNullptr(node, "returnType"),
-                            importNode(node["key"]), kind,(bool)node["generator"], (bool)node["async"], (bool)node["computed"]);
+    AstNode* id = importChildOrNullptr(node, "id");
+    return new ObjectMethod(loc, id, importChildArray(node, "params"), importChild(node, "body"),
+                            (TypeParameterDeclaration*)importChildOrNullptr(node, "typeParameters"),
+                            (TypeAnnotation*)importChildOrNullptr(node, "returnType"),
+                            importChild(node, "key"), kind,getBool(node, "generator"), getBool(node, "async"), getBool(node, "computed"));
 }
 
-AstNode* importFunctionExpression(const json& node, AstSourceSpan loc)
+AstNode* importFunctionExpression(const Local<Object>& node, AstSourceSpan& loc)
 {
-    AstNode* id = node["id"] != nullptr ? importNode(node["id"]) : nullptr;
-    vector<AstNode*> params;
-    for (auto&& child : node["params"])
-        params.push_back(importNode(child));
-    return new FunctionExpression(loc, id, params, importNode(node["body"]),
-                                    (TypeParameterDeclaration*)importNodeOrNullptr(node, "typeParameters"),
-                                    (TypeAnnotation*)importNodeOrNullptr(node, "returnType"),
-                                    (bool)node["generator"], (bool)node["async"]);
+    AstNode* id = importChildOrNullptr(node, "id");
+    return new FunctionExpression(loc, id, importChildArray(node, "params"), importChild(node, "body"),
+                                    (TypeParameterDeclaration*)importChildOrNullptr(node, "typeParameters"),
+                                    (TypeAnnotation*)importChildOrNullptr(node, "returnType"),
+                                    getBool(node, "generator"), getBool(node, "async"));
 }
 
-AstNode* importUnaryExpression(const json& node, AstSourceSpan loc)
+AstNode* importUnaryExpression(const Local<Object>& node, AstSourceSpan& loc)
 {
     using Operator = UnaryExpression::Operator;
     Operator op;
-    string opStr = node["operator"];
+    string opStr = getStr(node, "operator");
     if (opStr == "-")
         op = Operator::Minus;
     else if (opStr == "+")
@@ -374,28 +446,28 @@ AstNode* importUnaryExpression(const json& node, AstSourceSpan loc)
         op = Operator::Throw;
     else
         throw runtime_error("Unknown unary operator " + opStr);
-    return new UnaryExpression(loc, importNode(node["argument"]), op, (bool)node["prefix"]);
+    return new UnaryExpression(loc, importChild(node, "argument"), op, getBool(node, "prefix"));
 }
 
-AstNode* importUpdateExpression(const json& node, AstSourceSpan loc)
+AstNode* importUpdateExpression(const Local<Object>& node, AstSourceSpan& loc)
 {
     using Operator = UpdateExpression::Operator;
     Operator op;
-    string opStr = node["operator"];
+    string opStr = getStr(node, "operator");
     if (opStr == "++")
         op = Operator::Increment;
     else if (opStr == "--")
         op = Operator::Decrement;
     else
         throw runtime_error("Unknown update operator " + opStr);
-    return new UpdateExpression(loc, importNode(node["argument"]), op, (bool)node["prefix"]);
+    return new UpdateExpression(loc, importChild(node, "argument"), op, getBool(node, "prefix"));
 }
 
-AstNode* importBinaryExpression(const json& node, AstSourceSpan loc)
+AstNode* importBinaryExpression(const Local<Object>& node, AstSourceSpan& loc)
 {
     using Operator = BinaryExpression::Operator;
     Operator op;
-    string opStr = node["operator"];
+    string opStr = getStr(node, "operator");
     if (opStr == "==")
         op = Operator::Equal;
     else if (opStr == "!=")
@@ -440,14 +512,14 @@ AstNode* importBinaryExpression(const json& node, AstSourceSpan loc)
         op = Operator::Instanceof;
     else
         throw runtime_error("Unknown binary operator " + opStr);
-    return new BinaryExpression(loc, importNode(node["left"]), importNode(node["right"]), op);
+    return new BinaryExpression(loc, importChild(node, "left"), importChild(node, "right"), op);
 }
 
-AstNode* importAssignmentExpression(const json& node, AstSourceSpan loc)
+AstNode* importAssignmentExpression(const Local<Object>& node, AstSourceSpan& loc)
 {
     using Operator = AssignmentExpression::Operator;
     Operator op;
-    string opStr = node["operator"];
+    string opStr = getStr(node, "operator");
     if (opStr == "=")
         op = Operator::Equal;
     else if (opStr == "+=")
@@ -474,96 +546,81 @@ AstNode* importAssignmentExpression(const json& node, AstSourceSpan loc)
         op = Operator::AndEqual;
     else
         throw runtime_error("Unknown assigment operator " + opStr);
-    return new AssignmentExpression(loc, importNode(node["left"]), importNode(node["right"]), op);
+    return new AssignmentExpression(loc, importChild(node, "left"), importChild(node, "right"), op);
 }
 
-AstNode* importLogicalExpression(const json& node, AstSourceSpan loc)
+AstNode* importLogicalExpression(const Local<Object>& node, AstSourceSpan& loc)
 {
     using Operator = LogicalExpression::Operator;
     Operator op;
-    string opStr = node["operator"];
+    string opStr = getStr(node, "operator");
     if (opStr == "||")
         op = Operator::Or;
     else if (opStr == "&&")
         op = Operator::And;
     else
         throw runtime_error("Unknown logical operator " + opStr);
-    return new LogicalExpression(loc, importNode(node["left"]), importNode(node["right"]), op);
+    return new LogicalExpression(loc, importChild(node, "left"), importChild(node, "right"), op);
 }
 
-AstNode* importMemberExpression(const json& node, AstSourceSpan loc)
+AstNode* importMemberExpression(const Local<Object>& node, AstSourceSpan& loc)
 {
-    return new MemberExpression(loc, importNode(node["object"]), importNode(node["property"]), node["computed"]);
+    return new MemberExpression(loc, importChild(node, "object"), importChild(node, "property"), getBool(node, "computed"));
 }
 
-AstNode* importBindExpression(const json& node, AstSourceSpan loc)
+AstNode* importBindExpression(const Local<Object>& node, AstSourceSpan& loc)
 {
-    AstNode* object = node["object"] != nullptr ? importNode(node["object"]) : nullptr;
-    return new BindExpression(loc, object, importNode(node["callee"]));
+    AstNode* object = importChildOrNullptr(node, "object");
+    return new BindExpression(loc, object, importChild(node, "callee"));
 }
 
-AstNode* importConditionalExpression(const json& node, AstSourceSpan loc)
+AstNode* importConditionalExpression(const Local<Object>& node, AstSourceSpan& loc)
 {
-    return new ConditionalExpression(loc, importNode(node["test"]), importNode(node["alternate"]), importNode(node["consequent"]));
+    return new ConditionalExpression(loc, importChild(node, "test"), importChild(node, "alternate"), importChild(node, "consequent"));
 }
 
-AstNode* importCallExpression(const json& node, AstSourceSpan loc)
+AstNode* importCallExpression(const Local<Object>& node, AstSourceSpan& loc)
 {
-    auto callee = importNode(node["callee"]);
-    vector<AstNode*> args;
-    for (auto&& arg : node["arguments"])
-        args.push_back(importNode(arg));
-    return new CallExpression(loc, callee, args);
+    return new CallExpression(loc, importChild(node, "callee"), importChildArray(node, "arguments"));
 }
 
-AstNode* importNewExpression(const json& node, AstSourceSpan loc)
+AstNode* importNewExpression(const Local<Object>& node, AstSourceSpan& loc)
 {
-    auto callee = importNode(node["callee"]);
-    vector<AstNode*> args;
-    for (auto&& arg : node["arguments"])
-        args.push_back(importNode(arg));
-    return new NewExpression(loc, callee, args);
+    return new NewExpression(loc, importChild(node, "callee"), importChildArray(node, "arguments"));
 }
 
-AstNode* importSequenceExpression(const json& node, AstSourceSpan loc)
+AstNode* importSequenceExpression(const Local<Object>& node, AstSourceSpan& loc)
 {
-    vector<AstNode*> expressions;
-    for (auto&& child : node["expressions"])
-        expressions.push_back(importNode(child));
-    return new SequenceExpression(loc, expressions);
+    return new SequenceExpression(loc, importChildArray(node, "expressions"));
 }
 
-AstNode* importDoExpression(const json& node, AstSourceSpan loc)
+AstNode* importDoExpression(const Local<Object>& node, AstSourceSpan& loc)
 {
-    return new DoExpression(loc, importNode(node["body"]));
+    return new DoExpression(loc, importChild(node, "body"));
 }
 
-AstNode* importClassExpression(const json& node, AstSourceSpan loc)
+AstNode* importClassExpression(const Local<Object>& node, AstSourceSpan& loc)
 {
-    AstNode* id = node["id"] != nullptr ? importNode(node["id"]) : nullptr;
-    AstNode* superClass = node["superClass"] != nullptr ? importNode(node["superClass"]) : nullptr;
+    AstNode* id = importChildOrNullptr(node, "id");
+    AstNode* superClass = importChildOrNullptr(node, "superClass");
     vector<ClassImplements*> implements;
-    if (node.find("implements") != node.end())
-        for (auto&& child : node["implements"])
-            implements.push_back((ClassImplements*)importNode(child));
-    return new ClassExpression(loc, id, superClass, importNode(node["body"]),
-                                (TypeParameterDeclaration*)importNodeOrNullptr(node, "typeParameters"),
-                                (TypeParameterInstantiation*)importNodeOrNullptr(node, "superTypeParameters"), implements);
+    if (hasKey(node, "implements"))
+        implements = importChildArray<ClassImplements>(node, "implements");
+    return new ClassExpression(loc, id, superClass, importChild(node, "body"),
+                                (TypeParameterDeclaration*)importChildOrNullptr(node, "typeParameters"),
+                                (TypeParameterInstantiation*)importChildOrNullptr(node, "superTypeParameters"), move(implements));
 }
 
-AstNode* importClassBody(const json& node, AstSourceSpan loc)
+AstNode* importClassBody(const Local<Object>& node, AstSourceSpan& loc)
 {
-    vector<AstNode*> body;
-    for (auto&& child : node["body"])
-        body.push_back(importNode(child));
-    return new ClassBody(loc, body);
+    return new ClassBody(loc, importChildArray(node, "body"));
 }
 
-AstNode* importClassMethod(const json& node, AstSourceSpan loc)
+AstNode* importClassMethod(const Local<Object>& node, AstSourceSpan& loc)
 {
     using Kind = ClassMethod::Kind;
     Kind kind;
-    string kindStr = node["kind"];
+    string kindStr = getStr(node, "kind");
     if (kindStr == "constructor")
         kind = Kind::Constructor;
     else if (kindStr == "method")
@@ -575,21 +632,18 @@ AstNode* importClassMethod(const json& node, AstSourceSpan loc)
     else
         throw runtime_error("Unknown class method declaration kind " + kindStr);
 
-    AstNode* id = importNodeOrNullptr(node, "id");
-    vector<AstNode*> params;
-    for (auto&& child : node["params"])
-        params.push_back(importNode(child));
-    return new ClassMethod(loc, id, params, importNode(node["body"]), importNode(node["key"]),
-            (TypeParameterDeclaration*)importNodeOrNullptr(node, "typeParameters"),
-            (TypeAnnotation*)importNodeOrNullptr(node, "returnType"),
-            kind, (bool)node["generator"], (bool)node["async"], (bool)node["computed"], (bool)node["static"]);
+    AstNode* id = importChildOrNullptr(node, "id");
+    return new ClassMethod(loc, id, importChildArray(node, "params"), importChild(node, "body"), importChild(node, "key"),
+            (TypeParameterDeclaration*)importChildOrNullptr(node, "typeParameters"),
+            (TypeAnnotation*)importChildOrNullptr(node, "returnType"),
+            kind, getBool(node, "generator"), getBool(node, "async"), getBool(node, "computed"), getBool(node, "static"));
 }
 
-AstNode* importClassPrivateMethod(const json& node, AstSourceSpan loc)
+AstNode* importClassPrivateMethod(const Local<Object>& node, AstSourceSpan& loc)
 {
     using Kind = ClassPrivateMethod::Kind;
     Kind kind;
-    string kindStr = node["kind"];
+    string kindStr = getStr(node, "kind");
     if (kindStr == "method")
         kind = Kind::Method;
     else if (kindStr == "get")
@@ -599,46 +653,42 @@ AstNode* importClassPrivateMethod(const json& node, AstSourceSpan loc)
     else
         throw runtime_error("Unknown private class method declaration kind " + kindStr);
 
-    AstNode* id = node["id"] != nullptr ? importNode(node["id"]) : nullptr;
-    vector<AstNode*> params;
-    for (auto&& child : node["params"])
-        params.push_back(importNode(child));
-    return new ClassPrivateMethod(loc, id, params, importNode(node["body"]), importNode(node["key"]),
-            (TypeParameterDeclaration*)importNodeOrNullptr(node, "typeParameters"),
-            (TypeAnnotation*)importNodeOrNullptr(node, "returnType"),
-            kind, (bool)node["generator"], (bool)node["async"], (bool)node["static"]);
+    AstNode* id = importChildOrNullptr(node, "id");
+    return new ClassPrivateMethod(loc, id, importChildArray(node, "params"), importChild(node, "body"), importChild(node, "key"),
+            (TypeParameterDeclaration*)importChildOrNullptr(node, "typeParameters"),
+            (TypeAnnotation*)importChildOrNullptr(node, "returnType"),
+            kind, getBool(node, "generator"), getBool(node, "async"), getBool(node, "static"));
 }
 
-AstNode* importClassProperty(const json& node, AstSourceSpan loc)
+AstNode* importClassProperty(const Local<Object>& node, AstSourceSpan& loc)
 {
-    return new ClassProperty(loc, importNode(node["key"]), importNodeOrNullptr(node, "value"),
-                            (TypeAnnotation*)importNodeOrNullptr(node, "typeAnnotation"), (bool)node["static"], (bool)node["computed"]);
+    return new ClassProperty(loc, importChild(node, "key"), importChildOrNullptr(node, "value"),
+                            (TypeAnnotation*)importChildOrNullptr(node, "typeAnnotation"), getBool(node, "static"), getBool(node, "computed"));
 }
 
-AstNode* importClassPrivateProperty(const json& node, AstSourceSpan loc)
+AstNode* importClassPrivateProperty(const Local<Object>& node, AstSourceSpan& loc)
 {
-    return new ClassPrivateProperty(loc, importNode(node["key"]), importNode(node["value"]),
-                                    (TypeAnnotation*)importNodeOrNullptr(node, "typeAnnotation"), (bool)node["static"]);
+    return new ClassPrivateProperty(loc, importChild(node, "key"), importChild(node, "value"),
+                                    (TypeAnnotation*)importChildOrNullptr(node, "typeAnnotation"), getBool(node, "static"));
 }
 
-AstNode* importClassDeclaration(const json& node, AstSourceSpan loc)
+AstNode* importClassDeclaration(const Local<Object>& node, AstSourceSpan& loc)
 {
-    AstNode* id = node["id"] != nullptr ? importNode(node["id"]) : nullptr;
-    AstNode* superClass = node["superClass"] != nullptr ? importNode(node["superClass"]) : nullptr;
+    AstNode* id = importChildOrNullptr(node, "id");
+    AstNode* superClass = importChildOrNullptr(node, "superClass");
     vector<ClassImplements*> implements;
-    if (node.find("implements") != node.end())
-        for (auto&& child : node["implements"])
-            implements.push_back((ClassImplements*)importNode(child));
-    return new ClassDeclaration(loc, id, superClass, importNode(node["body"]),
-                                (TypeParameterDeclaration*)importNodeOrNullptr(node, "typeParameters"),
-                                (TypeParameterInstantiation*)importNodeOrNullptr(node, "superTypeParameters"), implements);
+    if (hasKey(node, "implements"))
+        implements = importChildArray<ClassImplements>(node, "implements");
+   return new ClassDeclaration(loc, id, superClass, importChild(node, "body"),
+                                (TypeParameterDeclaration*)importChildOrNullptr(node, "typeParameters"),
+                                (TypeParameterInstantiation*)importChildOrNullptr(node, "superTypeParameters"), move(implements));
 }
 
-AstNode* importVariableDeclaration(const json& node, AstSourceSpan loc)
+AstNode* importVariableDeclaration(const Local<Object>& node, AstSourceSpan& loc)
 {
     using Kind = VariableDeclaration::Kind;
     Kind kind;
-    string kindStr = node["kind"];
+    string kindStr = getStr(node, "kind");
     if (kindStr == "var")
         kind = Kind::Var;
     else if (kindStr == "let")
@@ -648,75 +698,59 @@ AstNode* importVariableDeclaration(const json& node, AstSourceSpan loc)
     else
         throw runtime_error("Unknown variable declaration kind " + kindStr);
 
-    vector<AstNode*> declarators;
-    for (auto&& child : node["declarations"])
-        declarators.push_back(importNode(child));
-    return new VariableDeclaration(loc, declarators, kind);
+    return new VariableDeclaration(loc, importChildArray(node, "declarations"), kind);
 }
 
-AstNode* importVariableDeclarator(const json& node, AstSourceSpan loc)
+AstNode* importVariableDeclarator(const Local<Object>& node, AstSourceSpan& loc)
 {
-    AstNode* init;
-    if (auto jinit = node["init"]; jinit != nullptr)
-        init = importNode(jinit);
-    else
-        init = nullptr;
-    return new VariableDeclarator(loc, importNode(node["id"]), init);
+    AstNode* init = importChildOrNullptr(node, "init");
+    return new VariableDeclarator(loc, importChild(node, "id"), init);
 }
 
-AstNode* importFunctionDeclaration(const json& node, AstSourceSpan loc)
+AstNode* importFunctionDeclaration(const Local<Object>& node, AstSourceSpan& loc)
 {
-    AstNode* id = node["id"] != nullptr ? importNode(node["id"]) : nullptr;
-    vector<AstNode*> params;
-    for (auto&& child : node["params"])
-        params.push_back(importNode(child));
-    return new FunctionDeclaration(loc, id, params, importNode(node["body"]),
-                                    (TypeParameterDeclaration*)importNodeOrNullptr(node, "typeParameters"),
-                                    (TypeAnnotation*)importNodeOrNullptr(node, "returnType"),
-                                    (bool)node["generator"], (bool)node["async"]);
+    AstNode* id = importChildOrNullptr(node, "id");
+    return new FunctionDeclaration(loc, id, importChildArray(node, "params"), importChild(node, "body"),
+                                    (TypeParameterDeclaration*)importChildOrNullptr(node, "typeParameters"),
+                                    (TypeAnnotation*)importChildOrNullptr(node, "returnType"),
+                                    getBool(node, "generator"), getBool(node, "async"));
 }
 
-AstNode* importSpreadElement(const json& node, AstSourceSpan loc)
+AstNode* importSpreadElement(const Local<Object>& node, AstSourceSpan& loc)
 {
-    return new SpreadElement(loc, importNode(node["argument"]));
+    return new SpreadElement(loc, importChild(node, "argument"));
 }
 
-AstNode* importObjectPattern(const json& node, AstSourceSpan loc)
+AstNode* importObjectPattern(const Local<Object>& node, AstSourceSpan& loc)
 {
-    vector<AstNode*> properties;
-    for (auto&& child : node["properties"])
-        properties.push_back(importNode(child));
-    return new ObjectPattern(loc, properties, (TypeAnnotation*)importNodeOrNullptr(node, "typeAnnotation"));
+    return new ObjectPattern(loc, importChildArray(node, "properties"), (TypeAnnotation*)importChildOrNullptr(node, "typeAnnotation"));
 }
 
-AstNode* importArrayPattern(const json& node, AstSourceSpan loc)
+AstNode* importArrayPattern(const Local<Object>& node, AstSourceSpan& loc)
 {
-    vector<AstNode*> elements;
-    for (auto&& child : node["elements"])
-        elements.push_back(importNode(child));
-    return new ArrayPattern(loc, elements);
+    return new ArrayPattern(loc, importChildArray(node, "elements"));
 }
 
-AstNode* importAssignmentPattern(const json& node, AstSourceSpan loc)
+AstNode* importAssignmentPattern(const Local<Object>& node, AstSourceSpan& loc)
 {
-    return new AssignmentPattern(loc, importNode(node["left"]), importNode(node["right"]));
+    return new AssignmentPattern(loc, importChild(node, "left"), importChild(node, "right"));
 }
 
-AstNode* importRestElement(const json& node, AstSourceSpan loc)
+AstNode* importRestElement(const Local<Object>& node, AstSourceSpan& loc)
 {
-    return new RestElement(loc, importNode(node["argument"]), (TypeAnnotation*)importNodeOrNullptr(node, "typeAnnotation"));
+    return new RestElement(loc, importChild(node, "argument"), (TypeAnnotation*)importChildOrNullptr(node, "typeAnnotation"));
 }
 
-AstNode* importMetaProperty(const json& node, AstSourceSpan loc)
+AstNode* importMetaProperty(const Local<Object>& node, AstSourceSpan& loc)
 {
-    return new MetaProperty(loc, importNode(node["meta"]), importNode(node["property"]));
+    return new MetaProperty(loc, importChild(node, "meta"), importChild(node, "property"));
 }
 
-AstNode* importImportDeclaration(const json& node, AstSourceSpan loc)
+AstNode* importImportDeclaration(const Local<Object>& node, AstSourceSpan& loc)
 {
     using Kind = ImportDeclaration::Kind;
     Kind kind;
-    string kindStr = node["importKind"];
+    string kindStr = getStr(node, "importKind");
     if (kindStr == "value")
         kind = Kind::Value;
     else if (kindStr == "type")
@@ -724,37 +758,34 @@ AstNode* importImportDeclaration(const json& node, AstSourceSpan loc)
     else
         throw runtime_error("Unknown import declaration kind " + kindStr);
 
-    vector<AstNode*> specifiers;
-    for (auto&& child : node["specifiers"])
-        specifiers.push_back(importNode(child));
-    return new ImportDeclaration(loc, specifiers, importNode(node["source"]), kind);
+    return new ImportDeclaration(loc, importChildArray(node, "specifiers"), importChild(node, "source"), kind);
 }
 
-AstNode* importImportSpecifier(const json& node, AstSourceSpan loc)
+AstNode* importImportSpecifier(const Local<Object>& node, AstSourceSpan& loc)
 {
     bool isTypeImport = false;
-    const json& kind = node["importKind"];
-    if (kind.is_string() && kind == "type")
+    auto kind = tryGetStr(node, "importKind");
+    if (kind.has_value() && *kind == "type")
         isTypeImport = true;
 
-    return new ImportSpecifier(loc, importNode(node["local"]), importNode(node["imported"]), isTypeImport);
+    return new ImportSpecifier(loc, importChild(node, "local"), importChild(node, "imported"), isTypeImport);
 }
 
-AstNode* importImportDefaultSpecifier(const json& node, AstSourceSpan loc)
+AstNode* importImportDefaultSpecifier(const Local<Object>& node, AstSourceSpan& loc)
 {
-    return new ImportDefaultSpecifier(loc, importNode(node["local"]));
+    return new ImportDefaultSpecifier(loc, importChild(node, "local"));
 }
 
-AstNode* importImportNamespaceSpecifier(const json& node, AstSourceSpan loc)
+AstNode* importImportNamespaceSpecifier(const Local<Object>& node, AstSourceSpan& loc)
 {
-    return new ImportNamespaceSpecifier(loc, importNode(node["local"]));
+    return new ImportNamespaceSpecifier(loc, importChild(node, "local"));
 }
 
-AstNode* importExportNamedDeclaration(const json& node, AstSourceSpan loc)
+AstNode* importExportNamedDeclaration(const Local<Object>& node, AstSourceSpan& loc)
 {
     using Kind = ExportNamedDeclaration::Kind;
     Kind kind;
-    string kindStr = node["exportKind"];
+    string kindStr = getStr(node, "exportKind");
     if (kindStr == "value")
         kind = Kind::Value;
     else if (kindStr == "type")
@@ -762,214 +793,189 @@ AstNode* importExportNamedDeclaration(const json& node, AstSourceSpan loc)
     else
         throw runtime_error("Unknown export named declaration kind " + kindStr);
 
-    AstNode* declaration = importNodeOrNullptr(node, "declaration");
-    AstNode* source = importNodeOrNullptr(node, "source");
-    vector<AstNode*> specifiers;
-    for (auto&& child : node["specifiers"])
-        specifiers.push_back(importNode(child));
-    return new ExportNamedDeclaration(loc, declaration, source, specifiers, kind);
+    AstNode* declaration = importChildOrNullptr(node, "declaration");
+    AstNode* source = importChildOrNullptr(node, "source");
+    return new ExportNamedDeclaration(loc, declaration, source, importChildArray(node, "specifiers"), kind);
 }
 
-AstNode* importExportDefaultDeclaration(const json& node, AstSourceSpan loc)
+AstNode* importExportDefaultDeclaration(const Local<Object>& node, AstSourceSpan& loc)
 {
-    return new ExportDefaultDeclaration(loc, importNode(node["declaration"]));
+    return new ExportDefaultDeclaration(loc, importChild(node, "declaration"));
 }
 
-AstNode* importExportAllDeclaration(const json& node, AstSourceSpan loc)
+AstNode* importExportAllDeclaration(const Local<Object>& node, AstSourceSpan& loc)
 {
-    return new ExportAllDeclaration(loc, importNode(node["source"]));
+    return new ExportAllDeclaration(loc, importChild(node, "source"));
 }
 
-AstNode* importExportSpecifier(const json& node, AstSourceSpan loc)
+AstNode* importExportSpecifier(const Local<Object>& node, AstSourceSpan& loc)
 {
-    return new ExportSpecifier(loc, importNode(node["local"]), importNode(node["exported"]));
+    return new ExportSpecifier(loc, importChild(node, "local"), importChild(node, "exported"));
 }
 
-AstNode* importExportDefaultSpecifier(const json& node, AstSourceSpan loc)
+AstNode* importExportDefaultSpecifier(const Local<Object>& node, AstSourceSpan& loc)
 {
-    return new ExportDefaultSpecifier(loc, importNode(node["exported"]));
+    return new ExportDefaultSpecifier(loc, importChild(node, "exported"));
 }
 
-AstNode* importTypeAnnotation(const json& node, AstSourceSpan loc)
+AstNode* importTypeAnnotation(const Local<Object>& node, AstSourceSpan& loc)
 {
-    return new TypeAnnotation(loc, importNode(node["typeAnnotation"]));
+    return new TypeAnnotation(loc, importChild(node, "typeAnnotation"));
 }
 
-AstNode* importGenericTypeAnnotation(const json& node, AstSourceSpan loc)
+AstNode* importGenericTypeAnnotation(const Local<Object>& node, AstSourceSpan& loc)
 {
-    return new GenericTypeAnnotation(loc, importNode(node["id"]), importNodeOrNullptr(node, "typeParameters"));
+    return new GenericTypeAnnotation(loc, importChild(node, "id"), importChildOrNullptr(node, "typeParameters"));
 }
 
-AstNode* importObjectTypeAnnotation(const json& node, AstSourceSpan loc)
+AstNode* importObjectTypeAnnotation(const Local<Object>& node, AstSourceSpan& loc)
 {
-    vector<ObjectTypeProperty*> properties;
-    for (auto&& child : node["properties"])
-        properties.push_back((ObjectTypeProperty*)importNode(child));
-    vector<ObjectTypeIndexer*> indexers;
-    for (auto&& child : node["indexers"])
-        indexers.push_back((ObjectTypeIndexer*)importNode(child));
-    return new ObjectTypeAnnotation(loc, properties, indexers, node["exact"]);
+    vector<ObjectTypeProperty*> properties = importChildArray<ObjectTypeProperty>(node, "properties");
+    vector<ObjectTypeIndexer*> indexers = importChildArray<ObjectTypeIndexer>(node, "indexers");
+    return new ObjectTypeAnnotation(loc, move(properties), move(indexers), getBool(node, "exact"));
 }
 
-AstNode* importObjectTypeProperty(const json& node, AstSourceSpan loc)
+AstNode* importObjectTypeProperty(const Local<Object>& node, AstSourceSpan& loc)
 {
-    return new ObjectTypeProperty(loc, (Identifier*)importNode(node["key"]), importNode(node["value"]), node["optional"]);
+    return new ObjectTypeProperty(loc, (Identifier*)importChild(node, "key"), importChild(node, "value"), getBool(node, "optional"));
 }
 
-AstNode* importObjectTypeIndexer(const json& node, AstSourceSpan loc)
+AstNode* importObjectTypeIndexer(const Local<Object>& node, AstSourceSpan& loc)
 {
-    return new ObjectTypeIndexer(loc, (Identifier*)importNodeOrNullptr(node, "id"), importNode(node["key"]), importNode(node["value"]));
+    return new ObjectTypeIndexer(loc, (Identifier*)importChildOrNullptr(node, "id"), importChild(node, "key"), importChild(node, "value"));
 }
 
-AstNode* importStringTypeAnnotation(const json&, AstSourceSpan loc)
+AstNode* importStringTypeAnnotation(const Local<Object>&, AstSourceSpan& loc)
 {
     return new StringTypeAnnotation(loc);
 }
 
-AstNode* importNumberTypeAnnotation(const json&, AstSourceSpan loc)
+AstNode* importNumberTypeAnnotation(const Local<Object>&, AstSourceSpan& loc)
 {
     return new NumberTypeAnnotation(loc);
 }
 
-AstNode* importBooleanTypeAnnotation(const json&, AstSourceSpan loc)
+AstNode* importBooleanTypeAnnotation(const Local<Object>&, AstSourceSpan& loc)
 {
     return new BooleanTypeAnnotation(loc);
 }
 
-AstNode* importVoidTypeAnnotation(const json&, AstSourceSpan loc)
+AstNode* importVoidTypeAnnotation(const Local<Object>&, AstSourceSpan& loc)
 {
     return new VoidTypeAnnotation(loc);
 }
 
-AstNode* importAnyTypeAnnotation(const json&, AstSourceSpan loc)
+AstNode* importAnyTypeAnnotation(const Local<Object>&, AstSourceSpan& loc)
 {
     return new AnyTypeAnnotation(loc);
 }
 
-AstNode* importExistsTypeAnnotation(const json&, AstSourceSpan loc)
+AstNode* importExistsTypeAnnotation(const Local<Object>&, AstSourceSpan& loc)
 {
     return new ExistsTypeAnnotation(loc);
 }
 
-AstNode* importMixedTypeAnnotation(const json&, AstSourceSpan loc)
+AstNode* importMixedTypeAnnotation(const Local<Object>&, AstSourceSpan& loc)
 {
     return new MixedTypeAnnotation(loc);
 }
 
-AstNode* importNullableTypeAnnotation(const json& node, AstSourceSpan loc)
+AstNode* importNullableTypeAnnotation(const Local<Object>& node, AstSourceSpan& loc)
 {
-    return new NullableTypeAnnotation(loc, importNode(node["typeAnnotation"]));
+    return new NullableTypeAnnotation(loc, importChild(node, "typeAnnotation"));
 }
 
-AstNode* importTupleTypeAnnotation(const json& node, AstSourceSpan loc)
+AstNode* importTupleTypeAnnotation(const Local<Object>& node, AstSourceSpan& loc)
 {
-    vector<AstNode*> types;
-    for (auto&& child : node["types"])
-        types.push_back(importNode(child));
-    return new TupleTypeAnnotation(loc, types);
+    return new TupleTypeAnnotation(loc, importChildArray(node, "types"));
 }
 
-AstNode* importUnionTypeAnnotation(const json& node, AstSourceSpan loc)
+AstNode* importUnionTypeAnnotation(const Local<Object>& node, AstSourceSpan& loc)
 {
-    vector<AstNode*> types;
-    for (auto&& child : node["types"])
-        types.push_back(importNode(child));
-    return new UnionTypeAnnotation(loc, types);
+    return new UnionTypeAnnotation(loc, importChildArray(node, "types"));
 }
 
-AstNode* importNullLiteralTypeAnnotation(const json&, AstSourceSpan loc)
+AstNode* importNullLiteralTypeAnnotation(const Local<Object>&, AstSourceSpan& loc)
 {
     return new NullLiteralTypeAnnotation(loc);
 }
 
-AstNode* importNumberLiteralTypeAnnotation(const json& node, AstSourceSpan loc)
+AstNode* importNumberLiteralTypeAnnotation(const Local<Object>& node, AstSourceSpan& loc)
 {
-    return new NumberLiteralTypeAnnotation(loc, node["value"]);
+    return new NumberLiteralTypeAnnotation(loc, getNumber(node, "value"));
 }
 
-AstNode* importStringLiteralTypeAnnotation(const json& node, AstSourceSpan loc)
+AstNode* importStringLiteralTypeAnnotation(const Local<Object>& node, AstSourceSpan& loc)
 {
-    return new StringLiteralTypeAnnotation(loc, node["value"]);
+    return new StringLiteralTypeAnnotation(loc, getStr(node, "value"));
 }
 
-AstNode* importBooleanLiteralTypeAnnotation(const json& node, AstSourceSpan loc)
+AstNode* importBooleanLiteralTypeAnnotation(const Local<Object>& node, AstSourceSpan& loc)
 {
-    return new BooleanLiteralTypeAnnotation(loc, node["value"]);
+    return new BooleanLiteralTypeAnnotation(loc, getBool(node, "value"));
 }
 
 
-AstNode* importFunctionTypeAnnotation(const json& node, AstSourceSpan loc)
+AstNode* importFunctionTypeAnnotation(const Local<Object>& node, AstSourceSpan& loc)
 {
-    vector<FunctionTypeParam*> params;
-    for (auto&& child : node["params"])
-        params.push_back((FunctionTypeParam*)importNode(child));
-    return new FunctionTypeAnnotation(loc, params, (FunctionTypeParam*)importNodeOrNullptr(node, "rest"), importNode(node["returnType"]));
+    vector<FunctionTypeParam*> params = importChildArray<FunctionTypeParam>(node, "params");
+    return new FunctionTypeAnnotation(loc, move(params), (FunctionTypeParam*)importChildOrNullptr(node, "rest"), importChild(node, "returnType"));
 }
 
-AstNode* importFunctionTypeParam(const json& node, AstSourceSpan loc)
+AstNode* importFunctionTypeParam(const Local<Object>& node, AstSourceSpan& loc)
 {
-    return new FunctionTypeParam(loc, (Identifier*)importNodeOrNullptr(node, "name"), importNode(node["typeAnnotation"]));
+    return new FunctionTypeParam(loc, (Identifier*)importChildOrNullptr(node, "name"), importChild(node, "typeAnnotation"));
 }
 
-AstNode* importTypeParameterInstantiation(const json& node, AstSourceSpan loc)
+AstNode* importTypeParameterInstantiation(const Local<Object>& node, AstSourceSpan& loc)
 {
-    vector<AstNode*> params;
-    for (auto&& child : node["params"])
-        params.push_back(importNode(child));
-    return new TypeParameterInstantiation(loc, params);
+    return new TypeParameterInstantiation(loc, importChildArray(node, "params"));
 }
 
-AstNode* importTypeParameterDeclaration(const json& node, AstSourceSpan loc)
+AstNode* importTypeParameterDeclaration(const Local<Object>& node, AstSourceSpan& loc)
 {
-    vector<AstNode*> params;
-    for (auto&& child : node["params"])
-        params.push_back(importNode(child));
-    return new TypeParameterDeclaration(loc, params);
+    return new TypeParameterDeclaration(loc, importChildArray(node, "params"));
 }
 
-AstNode* importTypeParameter(const json& node, AstSourceSpan loc)
+AstNode* importTypeParameter(const Local<Object>& node, AstSourceSpan& loc)
 {
-    return new TypeParameter(loc, node["name"]);
+    return new TypeParameter(loc, getStr(node, "name"));
 }
 
-AstNode* importTypeAlias(const json& node, AstSourceSpan loc)
+AstNode* importTypeAlias(const Local<Object>& node, AstSourceSpan& loc)
 {
-    return new TypeAlias(loc, (Identifier*)importNode(node["id"]), importNodeOrNullptr(node, "typeParameters"), importNode(node["right"]));
+    return new TypeAlias(loc, (Identifier*)importChild(node, "id"), importChildOrNullptr(node, "typeParameters"), importChild(node, "right"));
 }
 
-AstNode* importTypeCastExpression(const json& node, AstSourceSpan loc)
+AstNode* importTypeCastExpression(const Local<Object>& node, AstSourceSpan& loc)
 {
-    return new TypeCastExpression(loc, importNode(node["expression"]), (TypeAnnotation*)importNode(node["typeAnnotation"]));
+    return new TypeCastExpression(loc, importChild(node, "expression"), (TypeAnnotation*)importChild(node, "typeAnnotation"));
 }
 
-AstNode* importClassImplements(const json& node, AstSourceSpan loc)
+AstNode* importClassImplements(const Local<Object>& node, AstSourceSpan& loc)
 {
-    return new ClassImplements(loc, (Identifier*)importNode(node["id"]), (TypeParameterInstantiation*)importNodeOrNullptr(node, "typeParameters"));
+    return new ClassImplements(loc, (Identifier*)importChild(node, "id"), (TypeParameterInstantiation*)importChildOrNullptr(node, "typeParameters"));
 }
 
-AstNode* importQualifiedTypeIdentifier(const json& node, AstSourceSpan loc)
+AstNode* importQualifiedTypeIdentifier(const Local<Object>& node, AstSourceSpan& loc)
 {
-    return new QualifiedTypeIdentifier(loc, (Identifier*)importNode(node["qualification"]), (Identifier*)importNode(node["id"]));
+    return new QualifiedTypeIdentifier(loc, (Identifier*)importChild(node, "qualification"), (Identifier*)importChild(node, "id"));
 }
 
-AstNode* importTypeofTypeAnnotation(const json& node, AstSourceSpan loc)
+AstNode* importTypeofTypeAnnotation(const Local<Object>& node, AstSourceSpan& loc)
 {
-    return new TypeofTypeAnnotation(loc, importNode(node["argument"]));
+    return new TypeofTypeAnnotation(loc, importChild(node, "argument"));
 }
 
-AstNode* importInterfaceDeclaration(const json& node, AstSourceSpan loc)
+AstNode* importInterfaceDeclaration(const Local<Object>& node, AstSourceSpan& loc)
 {
-    vector<InterfaceExtends*> extends;
-    for (auto&& child : node["extends"])
-        extends.push_back((InterfaceExtends*)importNode(child));
-    vector<InterfaceExtends*> mixins;
-    for (auto&& child : node["mixins"])
-        mixins.push_back((InterfaceExtends*)importNode(child));
-    return new InterfaceDeclaration(loc, (Identifier*)importNode(node["id"]), (TypeParameterDeclaration*)importNodeOrNullptr(node, "typeParameters"),
-                                    importNode(node["body"]), extends, mixins);
+    vector<InterfaceExtends*> extends = importChildArray<InterfaceExtends>(node, "extends");
+    vector<InterfaceExtends*> mixins = importChildArray<InterfaceExtends>(node, "mixins");
+    return new InterfaceDeclaration(loc, (Identifier*)importChild(node, "id"), (TypeParameterDeclaration*)importChildOrNullptr(node, "typeParameters"),
+                                    importChild(node, "body"), move(extends), move(mixins));
 }
 
-AstNode* importInterfaceExtends(const json& node, AstSourceSpan loc)
+AstNode* importInterfaceExtends(const Local<Object>& node, AstSourceSpan& loc)
 {
-    return new InterfaceExtends(loc, (Identifier*)importNode(node["id"]), (TypeParameterInstantiation*)importNodeOrNullptr(node, "typeParameters"));
+    return new InterfaceExtends(loc, (Identifier*)importChild(node, "id"), (TypeParameterInstantiation*)importChildOrNullptr(node, "typeParameters"));
 }

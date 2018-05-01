@@ -11,7 +11,6 @@
 #include <v8.h>
 
 using namespace std;
-using json = nlohmann::json;
 
 extern "C" {
 extern const char babelScriptStart[];
@@ -36,34 +35,11 @@ static vector<ParseWorkPackage> workQueue;
 static std::condition_variable condvar;
 static std::mutex condvar_mutex;
 
-void loadBabelCompileCacheFile()
-{
-    optional<vector<uint8_t>> data = tryReadCacheFile(babelCompileCacheFileName);
-    if (!data.has_value())
-        return;
-    uint32_t versionTag;
-    memcpy(&versionTag, data->data(), sizeof(versionTag));
-    if (versionTag != v8::ScriptCompiler::CachedDataVersionTag()) {
-        trace("Invalidating Babel compile cache (v8 version mismatch)");
-        tryRemoveCacheFile(babelCompileCacheFileName);
-        return;
-    }
-
-    babelCompileCacheBackingVector = move(*data);
-    auto cachedData = new v8::ScriptCompiler::CachedData(babelCompileCacheBackingVector.data()+sizeof(versionTag),
-                                                         babelCompileCacheBackingVector.size()-sizeof(versionTag));
-    babelCompileCache.store(cachedData);
-}
-
-
-void writeBabelCompileCacheFile(v8::ScriptCompiler::CachedData* cachedData)
-{
-    uint32_t versionTag = v8::ScriptCompiler::CachedDataVersionTag();
-    vector<uint8_t> data(sizeof(versionTag)+cachedData->length);
-    memcpy(data.data(), &versionTag, sizeof(versionTag));
-    memcpy(data.data()+sizeof(versionTag), cachedData->data, cachedData->length);
-    tryWriteCacheFile(babelCompileCacheFileName, data);
-}
+static void loadBabelCompileCacheFile();
+static void writeBabelCompileCacheFile(v8::ScriptCompiler::CachedData* cachedData);
+static v8::Local<v8::Object> makeBabelObject(IsolateWrapper& isolateWrapper);
+static v8::Local<v8::Object> parseSourceScript(IsolateWrapper& isolateWrapper, v8::Local<v8::Object> babelObject, const std::string& scriptSource);
+static nlohmann::json stringifyAstObject(IsolateWrapper& isolateWrapper, v8::Local<v8::Object> astObject);
 
 static void worker_thread_loop()
 {
@@ -84,8 +60,14 @@ static void worker_thread_loop()
         workQueue.pop_back();
         condvar_lock.unlock();
 
-        auto jast = parseSourceScript(isolateWrapper, babelObj, package.source);
-        auto ast = importBabylonAst(package.module, jast);
+        Isolate* isolate = isolateWrapper.get();
+        Isolate::Scope isolateScope(isolate);
+        HandleScope handleScope(isolate);
+        Local<Context> context = Context::New(*isolateWrapper);
+        Context::Scope contextScope(context);
+
+        auto astObj = parseSourceScript(isolateWrapper, babelObj, package.source);
+        auto ast = importBabylonAst(package.module, astObj);
         package.astPromise.set_value(ast);
 
         condvar_lock.lock();
@@ -109,7 +91,7 @@ std::future<AstRoot*> parseSourceScriptAsync(Module &parentModule, const std::st
     return future;
 }
 
-v8::Local<v8::Object> makeBabelObject(IsolateWrapper& isolateWrapper)
+static v8::Local<v8::Object> makeBabelObject(IsolateWrapper& isolateWrapper)
 {
     using namespace v8;
 
@@ -147,28 +129,15 @@ v8::Local<v8::Object> makeBabelObject(IsolateWrapper& isolateWrapper)
     return handleScope.Escape(babelObject);
 }
 
-nlohmann::json stringifyAstObject(IsolateWrapper& isolateWrapper, v8::Local<v8::Object> astObject)
-{
-    using namespace v8;
-
-    // Should we really be taking an Object, serializing it to JSON, unserializing it, then converting it to a C++ AST?
-    // We sure as all hell shouldn't, but replacing the import from JSON with an import from V8 Object is not gonna be fun...
-    Local<String> jsonStr = JSON::Stringify(isolateWrapper.get()->GetCurrentContext(), astObject).ToLocalChecked();
-    String::Utf8Value jsonStrUtf8(jsonStr);
-    return json::parse(*jsonStrUtf8, *jsonStrUtf8 + jsonStrUtf8.length());
-}
-
-nlohmann::json parseSourceScript(IsolateWrapper& isolateWrapper, v8::Local<v8::Object> babelObject, const std::string& scriptSource)
+static v8::Local<v8::Object> parseSourceScript(IsolateWrapper& isolateWrapper, v8::Local<v8::Object> babelObject, const std::string& scriptSource)
 {
     using namespace v8;
 
     Isolate* isolate = isolateWrapper.get();
     Isolate::Scope isolateScope(isolate);
-    HandleScope handleScope(isolate);
-    Local<Context> context = Context::New(isolate);
-    Context::Scope contextScope(context);
+    EscapableHandleScope handleScope(isolate);
     TryCatch trycatch(isolate);
-
+    Local<Context> context = isolateWrapper.get()->GetCurrentContext();
     Local<Value> scriptSourceStr = String::NewFromUtf8(isolate, scriptSource.data(),
                                        NewStringType::kNormal, scriptSource.size())
                                        .ToLocalChecked();
@@ -182,16 +151,7 @@ nlohmann::json parseSourceScript(IsolateWrapper& isolateWrapper, v8::Local<v8::O
           "asyncGenerators",
           "flow"
         ],
-        "sourceType": "module",
-        "parserOpts": {
-            "plugins" : [
-                "objectRestSpread",
-                "classProperties",
-                "exportExtensions",
-                "asyncGenerators",
-                "flow"
-            ]
-        }
+        "sourceType": "module"
     })")).ToLocal(&transformOptions)) {
         reportV8Exception(isolate, &trycatch);
         throw std::runtime_error("parseSourceScript: Failed to parse JSON options");
@@ -208,10 +168,39 @@ nlohmann::json parseSourceScript(IsolateWrapper& isolateWrapper, v8::Local<v8::O
         throw std::runtime_error("parseSourceScript: Failed to parse script");
     }
 
-    return stringifyAstObject(isolateWrapper, result.As<Object>());
+    return handleScope.Escape(result.As<Object>());
 }
 
-void prepareOtherThreads()
+static void loadBabelCompileCacheFile()
+{
+    optional<vector<uint8_t>> data = tryReadCacheFile(babelCompileCacheFileName);
+    if (!data.has_value())
+        return;
+    uint32_t versionTag;
+    memcpy(&versionTag, data->data(), sizeof(versionTag));
+    if (versionTag != v8::ScriptCompiler::CachedDataVersionTag()) {
+        trace("Invalidating Babel compile cache (v8 version mismatch)");
+        tryRemoveCacheFile(babelCompileCacheFileName);
+        return;
+    }
+
+    babelCompileCacheBackingVector = move(*data);
+    auto cachedData = new v8::ScriptCompiler::CachedData(babelCompileCacheBackingVector.data()+sizeof(versionTag),
+                                                         babelCompileCacheBackingVector.size()-sizeof(versionTag));
+    babelCompileCache.store(cachedData);
+}
+
+
+static void writeBabelCompileCacheFile(v8::ScriptCompiler::CachedData* cachedData)
+{
+    uint32_t versionTag = v8::ScriptCompiler::CachedDataVersionTag();
+    vector<uint8_t> data(sizeof(versionTag)+cachedData->length);
+    memcpy(data.data(), &versionTag, sizeof(versionTag));
+    memcpy(data.data()+sizeof(versionTag), cachedData->data, cachedData->length);
+    tryWriteCacheFile(babelCompileCacheFileName, data);
+}
+
+static void prepareOtherThreads()
 {
     loadBabelCompileCacheFile();
 

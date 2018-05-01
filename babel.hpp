@@ -16,7 +16,4 @@ void stopParsingThreads();
 // This runs babel and imports its result in a worker thread, returning the AST
 std::future<AstRoot*> parseSourceScriptAsync(Module& parentModule, const std::string& script);
 
-v8::Local<v8::Object> makeBabelObject(IsolateWrapper& isolateWrapper);
-nlohmann::json parseSourceScript(IsolateWrapper& isolateWrapper, v8::Local<v8::Object> babelObject, const std::string& scriptSource);
-
 #endif // BABEL_H
