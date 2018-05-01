@@ -1,11 +1,12 @@
-#include "babel.hpp"
+#include "ast/parse.hpp"
 #include "utils.hpp"
 #include "ast/import.hpp"
 #include "reporting.hpp"
 #include "isolatewrapper.hpp"
-#include <iostream>
 #include <atomic>
 #include <thread>
+#include <cstring>
+#include <cassert>
 #include <algorithm>
 #include <fstream>
 #include <v8.h>
@@ -39,7 +40,6 @@ static void loadBabelCompileCacheFile();
 static void writeBabelCompileCacheFile(v8::ScriptCompiler::CachedData* cachedData);
 static v8::Local<v8::Object> makeBabelObject(IsolateWrapper& isolateWrapper);
 static v8::Local<v8::Object> parseSourceScript(IsolateWrapper& isolateWrapper, v8::Local<v8::Object> babelObject, const std::string& scriptSource);
-static nlohmann::json stringifyAstObject(IsolateWrapper& isolateWrapper, v8::Local<v8::Object> astObject);
 
 static void worker_thread_loop()
 {

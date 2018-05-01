@@ -1,21 +1,18 @@
 #include "module.hpp"
-#include "ast/import.hpp"
-#include "ast/walk.hpp"
 #include "ast/ast.hpp"
+#include "ast/parse.hpp"
+#include "ast/walk.hpp"
 #include "analyze/identresolution.hpp"
 #include "analyze/unused.hpp"
 #include "transform/flow.hpp"
-#include "babel.hpp"
 #include "global.hpp"
 #include "moduleresolver.hpp"
 #include "reporting.hpp"
 #include "utils.hpp"
-#include <iostream>
-#include <json.hpp>
 #include <limits>
+#include <cassert>
 #include <v8.h>
 
-using json = nlohmann::json;
 using namespace std;
 namespace fs = filesystem;
 

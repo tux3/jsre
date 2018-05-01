@@ -1,6 +1,8 @@
 #include "blank.hpp"
 #include "ast/ast.hpp"
 #include "utf8/utf8.h"
+#include <cassert>
+#include <cstring>
 
 void blankNodeFromSource(std::string &source, AstNode &node)
 {

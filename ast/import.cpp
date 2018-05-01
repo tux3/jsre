@@ -1,8 +1,6 @@
-#include "import.hpp"
-#include "ast.hpp"
-#include "location.hpp"
+#include "ast/import.hpp"
+#include "ast/ast.hpp"
 #include <cassert>
-#include <iostream>
 #include <unordered_map>
 
 using namespace std;

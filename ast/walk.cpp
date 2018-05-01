@@ -1,9 +1,8 @@
 #include "ast/walk.hpp"
+#include "ast/ast.hpp"
 #include "utils.hpp"
-#include <iostream>
 
 using namespace std;
-using json = nlohmann::json;
 
 void walkAst(AstNode& node, AstNodeCallback cb, std::function<bool(AstNode&)> predicate)
 {

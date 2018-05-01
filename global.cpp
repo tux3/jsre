@@ -2,7 +2,6 @@
 #include "isolatewrapper.hpp"
 #include "module/nativemodule.hpp"
 #include "module/moduleresolver.hpp"
-#include <iostream>
 #include <unordered_map>
 #include <string>
 

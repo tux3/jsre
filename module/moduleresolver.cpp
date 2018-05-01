@@ -1,10 +1,10 @@
 #include "moduleresolver.hpp"
+#include "ast/ast.hpp"
 #include "utils.hpp"
 #include "isolatewrapper.hpp"
 #include "reporting.hpp"
 #include "analyze/identresolution.hpp"
 #include <filesystem>
-#include <iostream>
 #include <json.hpp>
 #include <v8.h>
 

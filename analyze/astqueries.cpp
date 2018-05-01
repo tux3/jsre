@@ -1,5 +1,6 @@
 #include "astqueries.hpp"
 #include "ast/ast.hpp"
+#include <algorithm>
 
 bool isUnscopedPropertyOrMethodIdentifier(Identifier& node)
 {

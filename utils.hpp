@@ -4,7 +4,6 @@
 #include <string>
 #include <vector>
 #include <optional>
-#include <cstdint>
 
 namespace v8 {
 class Isolate;

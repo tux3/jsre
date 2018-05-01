@@ -1,6 +1,5 @@
 #include "isolatewrapper.hpp"
 #include "module/native/modules.hpp"
-#include <iostream>
 #include <v8.h>
 
 using namespace std;

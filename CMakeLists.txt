@@ -75,9 +75,9 @@ endfunction(add_headers_sources)
 
 list(APPEND SRCS main.cpp)
 add_headers_sources(
-    v8 isolatewrapper utils babel global reporting
+    v8 isolatewrapper utils global reporting
     module/basicmodule module/nativemodule module/module module/moduleresolver module/native/modules
-    ast/ast ast/walk ast/import ast/location
+    ast/ast ast/parse ast/import ast/location ast/walk
     transform/blank transform/flow
     analyze/identresolution analyze/unused analyze/astqueries
 )

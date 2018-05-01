@@ -2,7 +2,7 @@
 #include "isolatewrapper.hpp"
 #include "module/moduleresolver.hpp"
 #include "reporting.hpp"
-#include "babel.hpp"
+#include "ast/parse.hpp"
 #include <filesystem>
 #include <getopt.h>
 #include <iostream>
@@ -12,7 +12,6 @@
 
 using namespace std;
 namespace fs = filesystem;
-using json = nlohmann::json;
 
 void helpAndDie(const char* selfPath)
 {

@@ -4,9 +4,9 @@
 #include "analyze/astqueries.hpp"
 #include "reporting.hpp"
 #include "module/moduleresolver.hpp"
+#include <cassert>
 #include <vector>
 #include <unordered_map>
-#include <unordered_set>
 
 using namespace std;
 

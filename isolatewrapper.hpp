@@ -1,7 +1,6 @@
 #ifndef ISOLATEWRAPPER_HPP
 #define ISOLATEWRAPPER_HPP
 
-#include <json.hpp>
 #include <v8.h>
 
 class IsolateWrapper {

@@ -2,7 +2,6 @@
 #define IMPORT_HPP
 
 #include "ast/location.hpp"
-#include <json.hpp>
 #include <v8.h>
 
 #define IMPORTED_NODE_LIST(X)       \

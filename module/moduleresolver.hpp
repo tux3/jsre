@@ -1,7 +1,6 @@
 #ifndef MODULERESOLVER_HPP
 #define MODULERESOLVER_HPP
 
-#include "ast/ast.hpp"
 #include "module.hpp"
 #include "nativemodule.hpp"
 #include <filesystem>

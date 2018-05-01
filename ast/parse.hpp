@@ -1,10 +1,7 @@
-#ifndef BABEL_H
-#define BABEL_H
+#ifndef PARSE_H
+#define PARSE_H
 
-#include "isolatewrapper.hpp"
-#include <filesystem>
-#include <json.hpp>
-#include <utility>
+#include <string>
 #include <future>
 
 class AstRoot;
@@ -16,4 +13,4 @@ void stopParsingThreads();
 // This runs babel and imports its result in a worker thread, returning the AST
 std::future<AstRoot*> parseSourceScriptAsync(Module& parentModule, const std::string& script);
 
-#endif // BABEL_H
+#endif // PARSE_H
