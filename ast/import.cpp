@@ -352,7 +352,7 @@ AstNode* importThisExpression(const Local<Object>&, AstSourceSpan& loc)
 AstNode* importArrowFunctionExpression(const Local<Object>& node, AstSourceSpan& loc)
 {
     AstNode* id = importChildOrNullptr(node, "id");
-    bool isExpression;
+    bool isExpression = false;
     if (auto it = tryGetBool(node, "expression"); it.has_value())
         isExpression = *it;
     return new ArrowFunctionExpression(loc, id, importChildArray(node, "params"), importChild(node, "body"),

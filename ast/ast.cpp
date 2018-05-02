@@ -151,12 +151,17 @@ TemplateLiteral::TemplateLiteral(AstSourceSpan location, std::vector<AstNode*> q
     setParentOfChildren();
 }
 
-TemplateElement::TemplateElement(AstSourceSpan location, std::string rawValue, bool isTail)
+TemplateElement::TemplateElement(AstSourceSpan location, std::string rawValue, bool tail)
     : AstNode(location, AstNodeType::TemplateElement)
     , rawValue{ move(rawValue) }
-    , isTail{ isTail }
+    , tail{ tail }
 {
     setParentOfChildren();
+}
+
+bool TemplateElement::isTail()
+{
+    return tail;
 }
 
 TaggedTemplateExpression::TaggedTemplateExpression(AstSourceSpan location, AstNode* tag, AstNode* quasi)
@@ -436,11 +441,16 @@ ThisExpression::ThisExpression(AstSourceSpan location)
 }
 
 ArrowFunctionExpression::ArrowFunctionExpression(AstSourceSpan location, AstNode* id, vector<AstNode*> params, AstNode* body, TypeParameterDeclaration* typeParameters,
-                                                 TypeAnnotation* returnType, bool isGenerator, bool isAsync, bool isExpression)
+                                                 TypeAnnotation* returnType, bool isGenerator, bool isAsync, bool expression)
     : Function(location, AstNodeType::ArrowFunctionExpression, id, move(params), body, typeParameters, returnType, isGenerator, isAsync)
-    , isExpression{ isExpression }
+    , expression{ expression }
 {
     setParentOfChildren();
+}
+
+bool ArrowFunctionExpression::isExpression()
+{
+    return expression;
 }
 
 YieldExpression::YieldExpression(AstSourceSpan location, AstNode* argument, bool isDelegate)
@@ -1043,6 +1053,11 @@ NumberLiteralTypeAnnotation::NumberLiteralTypeAnnotation(AstSourceSpan location,
     setParentOfChildren();
 }
 
+double NumberLiteralTypeAnnotation::getValue()
+{
+    return value;
+}
+
 StringLiteralTypeAnnotation::StringLiteralTypeAnnotation(AstSourceSpan location, string value)
     : AstNode(location, AstNodeType::StringLiteralTypeAnnotation)
     , value{ move(value) }
@@ -1055,6 +1070,11 @@ BooleanLiteralTypeAnnotation::BooleanLiteralTypeAnnotation(AstSourceSpan locatio
     , value{ value }
 {
     setParentOfChildren();
+}
+
+bool BooleanLiteralTypeAnnotation::getValue()
+{
+    return value;
 }
 
 TypeofTypeAnnotation::TypeofTypeAnnotation(AstSourceSpan location, AstNode* argument)

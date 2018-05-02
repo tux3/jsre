@@ -116,11 +116,12 @@ private:
 
 class TemplateElement : public AstNode {
 public:
-    TemplateElement(AstSourceSpan location, std::string rawValue, bool isTail);
+    TemplateElement(AstSourceSpan location, std::string rawValue, bool tail);
+    bool isTail();
 
 private:
     std::string rawValue;
-    bool isTail;
+    bool tail;
 };
 
 class TaggedTemplateExpression : public AstNode {
@@ -353,10 +354,12 @@ public:
 class ArrowFunctionExpression : public Function {
 public:
     ArrowFunctionExpression(AstSourceSpan location, AstNode* id, std::vector<AstNode*> params, AstNode* body, TypeParameterDeclaration* typeParameters,
-                            TypeAnnotation* returnType, bool isGenerator, bool isAsync, bool isExpression);
+                            TypeAnnotation* returnType, bool isGenerator, bool isAsync, bool expression);
+
+    bool isExpression();
 
 private:
-    bool isExpression;
+    bool expression;
 };
 
 class YieldExpression : public AstNode {
@@ -1008,6 +1011,7 @@ public:
 class NumberLiteralTypeAnnotation : public AstNode {
 public:
     NumberLiteralTypeAnnotation(AstSourceSpan location, double value);
+    double getValue();
 
 private:
     double value;
@@ -1024,6 +1028,7 @@ private:
 class BooleanLiteralTypeAnnotation : public AstNode {
 public:
     BooleanLiteralTypeAnnotation(AstSourceSpan location, bool value);
+    bool getValue();
 
 private:
     bool value;

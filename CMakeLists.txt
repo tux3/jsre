@@ -5,6 +5,8 @@ project(jsre)
 set(V8_LIBS_DIR "/code/build/v8/v8/out.gn/x64.release")
 set(V8_INCLUDE_DIR "/code/build/v8/v8/include")
 
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
+
 ## Babel transpiler lib
 add_subdirectory(babel)
 
