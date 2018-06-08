@@ -4,6 +4,6 @@
     "babylon": "^7.0.0"
   },
   "scripts": {
-    "build": "webpack node_modules/babylon/lib/index.js babel.js"
+    "build": "webpack --display errors-only node_modules/babylon/lib/index.js babel.js"
   }
 }
