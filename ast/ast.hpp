@@ -985,6 +985,15 @@ private:
     AstNode* typeAnnotation;
 };
 
+class ArrayTypeAnnotation : public AstNode {
+public:
+    ArrayTypeAnnotation(AstSourceSpan location, AstNode* elementType);
+    virtual std::vector<AstNode*> getChildren() override;
+
+private:
+    AstNode* elementType;
+};
+
 class TupleTypeAnnotation : public AstNode {
 public:
     TupleTypeAnnotation(AstSourceSpan location, std::vector<AstNode*> types);
@@ -1088,6 +1097,16 @@ private:
     Identifier *key;
     AstNode *value;
     bool optional;
+};
+
+class ObjectTypeSpreadProperty : public AstNode {
+public:
+    ObjectTypeSpreadProperty(AstSourceSpan location, AstNode* argument);
+    AstNode* getArgument();
+    virtual std::vector<AstNode*> getChildren() override;
+
+private:
+    AstNode *argument;
 };
 
 class ObjectTypeIndexer : public AstNode {

@@ -302,6 +302,10 @@ vector<AstNode*> ObjectTypeProperty::getChildren() {
     return {key, value};
 }
 
+vector<AstNode*> ObjectTypeSpreadProperty::getChildren() {
+    return {argument};
+}
+
 vector<AstNode*> ObjectTypeIndexer::getChildren() {
     return {id, key, value};
 }
@@ -328,6 +332,11 @@ vector<AstNode*> TypeCastExpression::getChildren()
 vector<AstNode*> NullableTypeAnnotation::getChildren()
 {
     return {typeAnnotation};
+}
+
+vector<AstNode*> ArrayTypeAnnotation::getChildren()
+{
+    return {elementType};
 }
 
 vector<AstNode*> TupleTypeAnnotation::getChildren()

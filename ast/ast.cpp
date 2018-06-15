@@ -1026,6 +1026,13 @@ NullableTypeAnnotation::NullableTypeAnnotation(AstSourceSpan location, AstNode* 
     setParentOfChildren();
 }
 
+ArrayTypeAnnotation::ArrayTypeAnnotation(AstSourceSpan location, AstNode* elementType)
+    : AstNode(location, AstNodeType::ArrayTypeAnnotation)
+    , elementType{ elementType }
+{
+    setParentOfChildren();
+}
+
 TupleTypeAnnotation::TupleTypeAnnotation(AstSourceSpan location,std::vector<AstNode*> types)
     : AstNode(location, AstNodeType::TupleTypeAnnotation)
     , types{ move(types) }
@@ -1137,6 +1144,13 @@ AstNode *ObjectTypeProperty::getValue()
 bool ObjectTypeProperty::isOptional()
 {
     return optional;
+}
+
+ObjectTypeSpreadProperty::ObjectTypeSpreadProperty(AstSourceSpan location, AstNode *argument)
+    : AstNode(location, AstNodeType::ObjectTypeSpreadProperty)
+    , argument{ argument }
+{
+    setParentOfChildren();
 }
 
 ObjectTypeIndexer::ObjectTypeIndexer(AstSourceSpan location, Identifier *id, AstNode *key, AstNode *value)

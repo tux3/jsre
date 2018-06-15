@@ -843,6 +843,11 @@ AstNode* importObjectTypeIndexer(const Local<Object>& node, AstSourceSpan& loc)
     return new ObjectTypeIndexer(loc, (Identifier*)importChildOrNullptr(node, "id"), importChild(node, "key"), importChild(node, "value"));
 }
 
+AstNode* importObjectTypeSpreadProperty(const Local<Object>& node, AstSourceSpan& loc)
+{
+    return new ObjectTypeSpreadProperty(loc, importChild(node, "argument"));
+}
+
 AstNode* importStringTypeAnnotation(const Local<Object>&, AstSourceSpan& loc)
 {
     return new StringTypeAnnotation(loc);
@@ -881,6 +886,11 @@ AstNode* importMixedTypeAnnotation(const Local<Object>&, AstSourceSpan& loc)
 AstNode* importNullableTypeAnnotation(const Local<Object>& node, AstSourceSpan& loc)
 {
     return new NullableTypeAnnotation(loc, importChild(node, "typeAnnotation"));
+}
+
+AstNode* importArrayTypeAnnotation(const Local<Object>& node, AstSourceSpan& loc)
+{
+    return new ArrayTypeAnnotation(loc, importChild(node, "elementType"));
 }
 
 AstNode* importTupleTypeAnnotation(const Local<Object>& node, AstSourceSpan& loc)

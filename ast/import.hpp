@@ -95,6 +95,7 @@
     X(ExistsTypeAnnotation)         \
     X(MixedTypeAnnotation)          \
     X(NullableTypeAnnotation)       \
+    X(ArrayTypeAnnotation)          \
     X(TupleTypeAnnotation)          \
     X(UnionTypeAnnotation)          \
     X(TypeofTypeAnnotation)         \
@@ -107,6 +108,7 @@
     X(ObjectTypeAnnotation)         \
     X(ObjectTypeProperty)           \
     X(ObjectTypeIndexer)            \
+    X(ObjectTypeSpreadProperty)     \
     X(TypeAlias)                    \
     X(TypeCastExpression)           \
     X(ClassImplements)              \
