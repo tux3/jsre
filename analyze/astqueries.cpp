@@ -2,6 +2,28 @@
 #include "ast/ast.hpp"
 #include <algorithm>
 
+bool isExternalIdentifier(Identifier& node)
+{
+    auto parent = node.getParent();
+    if (parent->getType() == AstNodeType::ImportSpecifier) {
+        return ((ImportSpecifier*)parent)->getImported() == &node;
+    } else if (parent->getType() == AstNodeType::ImportDefaultSpecifier) {
+        return ((ImportDefaultSpecifier*)parent)->getLocal() == &node;
+    } else if (parent->getType() == AstNodeType::ExportDefaultSpecifier) {
+        return ((ExportDefaultSpecifier*)parent)->getExported() == &node;
+    } else if (parent->getType() == AstNodeType::ExportSpecifier) {
+        auto exportNode = (ExportSpecifier*)parent;
+        if (exportNode->getExported() == &node)
+            return true;
+        else if (exportNode->getLocal() == &node)
+            return exportNode->getLocal()->getName() == exportNode->getExported()->getName();
+        else
+            return false;
+    } else {
+        return false;
+    }
+}
+
 bool isUnscopedPropertyOrMethodIdentifier(Identifier& node)
 {
     auto parent = node.getParent();

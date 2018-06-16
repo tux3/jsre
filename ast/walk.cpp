@@ -4,10 +4,14 @@
 
 using namespace std;
 
-void walkAst(AstNode& node, AstNodeCallback cb, std::function<bool(AstNode&)> predicate)
+void walkAst(AstNode& node, AstNodeCallback cb, std::function<WalkDecision(AstNode&)> predicate)
 {
-    if (predicate(node))
+    auto decision = predicate(node);
+    if (decision == WalkDecision::WalkInto || decision == WalkDecision::WalkOver)
         cb(node);
+    if (decision == WalkDecision::WalkOver || decision == WalkDecision::SkipOver)
+        if (node.getType() != AstNodeType::Root) // Easy to forget, but we never want to skip the root's children
+            return;
     for (auto child : node.getChildren())
         if (child)
             walkAst(*child, cb, predicate);

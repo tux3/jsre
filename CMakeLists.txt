@@ -70,7 +70,11 @@ target_compile_options(startup_snapshots PRIVATE "-I${V8_LIBS_DIR}/")
 ## Main project target
 function(add_headers_sources basename_list)
     foreach(basename ${ARGV})
-        set(SRCS "${SRCS}" "${basename}.cpp" "${basename}.hpp")
+        if(EXISTS "${PROJECT_SOURCE_DIR}/${basename}.cpp")
+            set(SRCS "${SRCS}" "${basename}.cpp" "${basename}.hpp")
+        else()
+            set(SRCS "${SRCS}" "${basename}.hpp")
+        endif()
     endforeach(basename)
     set(SRCS "${SRCS}" PARENT_SCOPE)
 endfunction(add_headers_sources)
@@ -81,7 +85,8 @@ add_headers_sources(
     module/basicmodule module/nativemodule module/module module/moduleresolver module/native/modules
     ast/ast ast/parse ast/import ast/location ast/walk
     transform/blank transform/flow
-    analyze/identresolution analyze/unused analyze/astqueries
+    analyze/identresolution analyze/astqueries analyze/unused analyze/missingawait
+    queries/maybe queries/dataflow
 )
 
 find_library(V8_LIB_V8 NAMES v8 PATHS ${V8_LIBS_DIR})

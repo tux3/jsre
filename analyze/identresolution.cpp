@@ -38,27 +38,6 @@ static bool isPartialScopeNodeType(AstNodeType type)
             || type == AstNodeType::TypeAlias; // Not a traditional scope!
 }
 
-// True if this identifier is not a local declaration, but refers to an exported or imported name
-static bool isExternalIdentifier(Identifier& node)
-{
-    auto parent = node.getParent();
-    if (parent->getType() == AstNodeType::ImportSpecifier) {
-        return ((ImportSpecifier*)parent)->getImported() == &node;
-    } else if (parent->getType() == AstNodeType::ExportDefaultSpecifier) {
-        return ((ExportDefaultSpecifier*)parent)->getExported() == &node;
-    } else if (parent->getType() == AstNodeType::ExportSpecifier) {
-        auto exportNode = (ExportSpecifier*)parent;
-        if (exportNode->getExported() == &node)
-            return true;
-        else if (exportNode->getLocal() == &node)
-            return exportNode->getLocal()->getName() == exportNode->getExported()->getName();
-        else
-            return false;
-    } else {
-        return false;
-    }
-}
-
 // True if this identifier is a property in a member expression or a qualified expression, and doesn't refer to a value in a local scope
 static bool isMemberPropertyOrQualifiedIdentifier(Identifier& node)
 {
@@ -344,8 +323,10 @@ void defineMissingGlobalIdentifiers(v8::Local<v8::Context> context, const std::v
     }
 }
 
-AstNode *resolveImportedIdentifierDeclaration(ImportSpecifier &importSpec)
+AstNode *resolveImportedIdentifierDeclaration(AstNode &importSpec)
 {
+    // TODO: Make some attempt at resolving exported identifiers of non-ES6 modules
+
     Module& sourceMod = importSpec.getParentModule();
     auto importDeclNode = (ImportDeclaration*)importSpec.getParent();
     const string& source = importDeclNode->getSource();
@@ -354,6 +335,98 @@ AstNode *resolveImportedIdentifierDeclaration(ImportSpecifier &importSpec)
         return nullptr;
     Module& importedMod = reinterpret_cast<Module&>(ModuleResolver::getModule(sourceMod, source, true));
 
-    /// TODO: Resolve imported identifiers function
-    throw std::runtime_error("Not implemented!");
+    AstNode* exported = nullptr;
+    if (importSpec.getType() == AstNodeType::ImportDefaultSpecifier) {
+        walkAst(importedMod.getAst(), [&](AstNode& node) {
+            if (node.getType() == AstNodeType::ExportDefaultDeclaration) {
+                exported = ((ExportDefaultDeclaration&)node).getDeclaration();
+            } else if (node.getType() == AstNodeType::ExportSpecifier) {
+                auto& specifier = (ExportSpecifier&)node;
+                if (specifier.getExported()->getName() == "default")
+                    exported = specifier.getLocal();
+            }
+        }, [&](AstNode& node) {
+            if (node.getType() == AstNodeType::ExportDefaultDeclaration || node.getType() == AstNodeType::ExportSpecifier)
+                return WalkDecision::WalkOver;
+            else if (node.getType() == AstNodeType::ExportNamedDeclaration)
+                return WalkDecision::SkipInto;
+            else
+                return WalkDecision::SkipOver;
+        });
+    } else if (importSpec.getType() == AstNodeType::ImportSpecifier) {
+        const auto& importSpecName = ((ImportSpecifier&)importSpec).getImported()->getName();
+        walkAst(importedMod.getAst(), [&](AstNode& node) {
+            if (node.getType() == AstNodeType::ExportAllDeclaration) {
+                exported = &node;
+            } else if (node.getType() == AstNodeType::ExportSpecifier) {
+                auto& specifier = (ExportSpecifier&)node;
+                if (specifier.getExported()->getName() == importSpecName)
+                    exported = specifier.getLocal();
+            } else if (node.getType() == AstNodeType::TypeAlias) {
+                auto& typeAlias = (TypeAlias&)node;
+                if (typeAlias.getId()->getName() == importSpecName)
+                    exported = &typeAlias;
+            } else if (node.getType() == AstNodeType::InterfaceDeclaration) {
+                auto& decl = (InterfaceDeclaration&)node;
+                if (decl.getId()->getName() == importSpecName)
+                    exported = &decl;
+            } else if (node.getType() == AstNodeType::FunctionDeclaration) {
+                auto& decl = (FunctionDeclaration&)node;
+                if (decl.getId()->getName() == importSpecName)
+                    exported = &decl;
+            } else if (node.getType() == AstNodeType::ClassDeclaration) {
+                auto& decl = (ClassDeclaration&)node;
+                if (decl.getId()->getName() == importSpecName)
+                    exported = &decl;
+            } else if (node.getType() == AstNodeType::VariableDeclarator) {
+                auto& decl = (VariableDeclarator&)node;
+                if (decl.getId()->getName() == importSpecName)
+                    exported = &decl;
+            }
+        }, [&](AstNode& node) {
+            if (node.getType() == AstNodeType::ExportAllDeclaration
+                    || node.getType() == AstNodeType::ExportSpecifier
+                    || node.getType() == AstNodeType::TypeAlias
+                    || node.getType() == AstNodeType::InterfaceDeclaration
+                    || node.getType() == AstNodeType::FunctionDeclaration
+                    || node.getType() == AstNodeType::ClassDeclaration
+                    || node.getType() == AstNodeType::VariableDeclarator)
+                return WalkDecision::WalkOver;
+            else if (node.getType() == AstNodeType::ExportNamedDeclaration
+                     || node.getType() == AstNodeType::VariableDeclaration)
+                return WalkDecision::SkipInto;
+            else
+                return WalkDecision::SkipOver;
+        });
+    } else {
+        assert(false);
+    }
+
+    if (exported && exported->getType() == AstNodeType::Identifier) {
+        auto resolvedLocals = importedMod.getResolvedLocalIdentifiers();
+        const auto& resolvedIt = resolvedLocals.find((Identifier*)exported);
+        if (resolvedIt != resolvedLocals.end())
+            exported = resolvedIt->second;
+    }
+
+    return exported;
+}
+
+AstNode *resolveIdentifierDeclaration(Identifier &identifier)
+{
+    auto& module = identifier.getParentModule();
+    const auto& resolvedIds = module.getResolvedLocalIdentifiers();
+    const auto& it = resolvedIds.find(&identifier);
+    if (it == resolvedIds.end())
+        return nullptr;
+
+    AstNode* decl = it->second->getParent();
+    while (decl->getType() == AstNodeType::ImportDefaultSpecifier
+            || decl->getType() == AstNodeType::ImportSpecifier) {
+        decl = resolveImportedIdentifierDeclaration(*decl);
+        if (!decl)
+            return nullptr;
+    }
+
+    return decl;
 }

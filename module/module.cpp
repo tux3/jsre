@@ -4,6 +4,7 @@
 #include "ast/walk.hpp"
 #include "analyze/identresolution.hpp"
 #include "analyze/unused.hpp"
+#include "analyze/missingawait.hpp"
 #include "transform/flow.hpp"
 #include "global.hpp"
 #include "moduleresolver.hpp"
@@ -50,6 +51,7 @@ void Module::analyze()
     resolveImportedIdentifiers();
 
     findUnusedLocalDeclarations(*this);
+    findMissingAwaits(*this);
 
     // A good analysis strategy might be to start with the symbols we have in our local module,
     // and move to imports whenever they are actually used by our local code.
@@ -118,6 +120,16 @@ void Module::resolveImportedIdentifiers()
 
     //trace("Resolving imported identifiers for module "+path.string());
 
+    walkAst(getAst(), [&](AstNode& node){
+        AstNode* declNode = resolveImportedIdentifierDeclaration(node);
+    }, [&](AstNode& node) {
+        if (node.getType() == AstNodeType::ImportDeclaration)
+            return WalkDecision::SkipInto;
+        else if (node.getType() == AstNodeType::ImportSpecifier || node.getType() == AstNodeType::ImportDefaultSpecifier)
+            return WalkDecision::WalkInto;
+        else
+            return WalkDecision::SkipOver;
+    });
 }
 
 v8::Local<v8::Module> Module::compileModuleFromSource(const string& filename, const string& source)
@@ -346,9 +358,11 @@ void Module::resolveProjectImports(const fs::path& projectDir)
     }, [&](AstNode& node) {
         if (node.getType() != AstNodeType::Identifier
                 || node.getParent()->getType() != AstNodeType::CallExpression)
-            return false;
+            return WalkDecision::SkipInto;
         auto& id = (Identifier&)node;
-        return id.getName() == "require" && resolvedLocalIdentifiers.find(&id) == resolvedLocalIdentifiers.end();
+        if (id.getName() == "require" && resolvedLocalIdentifiers.find(&id) == resolvedLocalIdentifiers.end())
+            return WalkDecision::WalkInto;
+        return WalkDecision::SkipInto;
     });
 
     for (auto module : modulesToResolve)

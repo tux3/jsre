@@ -576,6 +576,11 @@ const std::vector<AstNode *> &CallExpression::getArguments()
     return arguments;
 }
 
+AstNode *CallExpression::getCallee()
+{
+    return callee;
+}
+
 CallExpression::CallExpression(AstSourceSpan location, AstNodeType type, AstNode* callee, vector<AstNode*> arguments)
     : AstNode(location, type)
     , callee{ callee }
@@ -750,9 +755,9 @@ VariableDeclarator::VariableDeclarator(AstSourceSpan location, AstNode* id, AstN
     setParentOfChildren();
 }
 
-AstNode* VariableDeclarator::getId()
+Identifier *VariableDeclarator::getId()
 {
-    return id;
+    return reinterpret_cast<Identifier*>(id);
 }
 
 SpreadElement::SpreadElement(AstSourceSpan location, AstNode* argument)
@@ -923,6 +928,11 @@ ExportDefaultDeclaration::ExportDefaultDeclaration(AstSourceSpan location, AstNo
     , declaration{ declaration }
 {
     setParentOfChildren();
+}
+
+AstNode *ExportDefaultDeclaration::getDeclaration()
+{
+    return declaration;
 }
 
 ExportAllDeclaration::ExportAllDeclaration(AstSourceSpan location, AstNode* source)

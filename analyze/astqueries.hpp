@@ -4,6 +4,10 @@
 class AstNode;
 class Identifier;
 
+// True if this identifier is not a local declaration, but refers to an exported or imported name
+// Note that if the identifier refers to a local name in an import specifier, it is not considered external!
+bool isExternalIdentifier(Identifier& node);
+
 // True is this identifier introduces a property or method of an object or class, but is not part of any scope (accessed through member expressions)
 bool isUnscopedPropertyOrMethodIdentifier(Identifier& node);
 

@@ -37,9 +37,21 @@ void defineMissingGlobalIdentifiers(v8::Local<v8::Context> context, const std::v
 /**
  * Finds the declaration of the identifier local to the imported module and imported by that specifier.
  * This does not try to return an ExportSpecifier, but the declaration of the identifier under its original name.
+ * Does not handle ImportNamespaceSpecifiers, since those arguably don't refer to a particular Ast node
+ * If the imported module is re-exporting an imported identifier, we do not recursively resolve it, we return the local declaration.
+ * In particular in the case the imported identifier comes from an ExportAllDeclaration, this is the node we return.
  *
  * Return nullptr if this import specifier refers to a native module, or if the declaration couldn't be found.
  */
-AstNode* resolveImportedIdentifierDeclaration(ImportSpecifier& importSpec);
+AstNode* resolveImportedIdentifierDeclaration(AstNode& importSpec);
+
+/**
+ * Finds the original (non-import) declaration for this (potentially imported) identifier, in whatever module originally declared it.
+ * This does not try to return an ExportSpecifier, but the declaration of the identifier under its original name.
+ * Note that if the identifier is declared as a variable, we do return the variable declarator node, and not its initializer (if any)!
+ *
+ * Return nullptr if this import specifier refers to a native module, or if the declaration couldn't be found.
+ */
+AstNode* resolveIdentifierDeclaration(Identifier& identifier);
 
 #endif // IDENTRESOLUTION_HPP

@@ -289,12 +289,12 @@ public:
     Identifier* getId();
     BlockStatement* getBody();
     const std::vector<Identifier*>& getParams();
+    bool isGenerator();
+    bool isAsync();
 
 protected:
     Function(AstSourceSpan location, AstNodeType type, AstNode* id, std::vector<AstNode*> params, AstNode* body,
              TypeParameterDeclaration* typeParameters, TypeAnnotation* returnType, bool generator, bool async);
-    bool isGenerator();
-    bool isAsync();
     virtual std::vector<AstNode*> getChildren() override;
 
 protected:
@@ -545,6 +545,7 @@ class CallExpression : public AstNode {
 public:
     CallExpression(AstSourceSpan location, AstNode* callee, std::vector<AstNode*> arguments);
     const std::vector<AstNode*>& getArguments();
+    AstNode* getCallee();
     virtual std::vector<AstNode*> getChildren() override;
 
 protected:
@@ -709,7 +710,7 @@ private:
 class VariableDeclarator : public AstNode {
 public:
     VariableDeclarator(AstSourceSpan location, AstNode* id, AstNode* init);
-    AstNode* getId();
+    Identifier* getId();
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
@@ -883,6 +884,7 @@ private:
 class ExportDefaultDeclaration : public AstNode {
 public:
     ExportDefaultDeclaration(AstSourceSpan location, AstNode* declaration);
+    AstNode* getDeclaration();
     virtual std::vector<AstNode*> getChildren() override;
 
 private:

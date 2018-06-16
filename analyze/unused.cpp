@@ -67,7 +67,7 @@ void findUnusedLocalDeclarations(Module &module)
 
         // Non-type identifiers in type declarations, like paraneter names, are not unused since they are unscope
         if (isUnscopedTypeIdentifier(identifier))
-                continue;
+            continue;
 
         // There's no way to remove unused params in a function expression, so no warning, but it's convention to start their name with a '_'
         if (isFunctionalExpressionArgumentIdentifier(identifier)) {
