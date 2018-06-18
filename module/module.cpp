@@ -5,6 +5,7 @@
 #include "analyze/identresolution.hpp"
 #include "analyze/unused.hpp"
 #include "analyze/missingawait.hpp"
+#include "analyze/conditionals.hpp"
 #include "transform/flow.hpp"
 #include "global.hpp"
 #include "moduleresolver.hpp"
@@ -52,6 +53,7 @@ void Module::analyze()
 
     findUnusedLocalDeclarations(*this);
     findMissingAwaits(*this);
+    analyzeConditionals(*this);
 
     // A good analysis strategy might be to start with the symbols we have in our local module,
     // and move to imports whenever they are actually used by our local code.
@@ -233,6 +235,11 @@ v8::Local<v8::Module> Module::getExecutableES6Module()
 int Module::getCompiledModuleIdentityHash()
 {
     return getCompiledModule()->GetIdentityHash();
+}
+
+const string &Module::getOriginalSource() const
+{
+    return originalSource;
 }
 
 string Module::getPath() const

@@ -1,6 +1,8 @@
 #ifndef LOCATION_HPP
 #define LOCATION_HPP
 
+#include <string>
+
 struct AstSourcePosition
 {
     AstSourcePosition(unsigned offset, unsigned line, unsigned column);
@@ -19,6 +21,7 @@ struct AstSourcePosition
 struct AstSourceSpan
 {
     AstSourceSpan(AstSourcePosition start, AstSourcePosition end);
+    std::string toString(const std::string& source); // NOTE: This is slow, due to UTF8 processing
 
     AstSourcePosition start, end;
 };

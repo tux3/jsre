@@ -85,7 +85,7 @@ add_headers_sources(
     module/basicmodule module/nativemodule module/module module/moduleresolver module/native/modules
     ast/ast ast/parse ast/import ast/location ast/walk
     transform/blank transform/flow
-    analyze/identresolution analyze/astqueries analyze/unused analyze/missingawait
+    analyze/identresolution analyze/astqueries analyze/unused analyze/missingawait analyze/conditionals
     queries/maybe queries/dataflow
 )
 

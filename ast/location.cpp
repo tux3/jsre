@@ -1,4 +1,5 @@
 #include "location.hpp"
+#include "utf8/utf8.h"
 #include <cassert>
 
 AstSourcePosition::AstSourcePosition(unsigned offset, unsigned line, unsigned column)
@@ -30,4 +31,14 @@ AstSourceSpan::AstSourceSpan(AstSourcePosition start, AstSourcePosition end)
     : start{start}, end{end}
 {
     assert(end >= start);
+}
+
+std::string AstSourceSpan::toString(const std::string &source)
+{
+    const char* beg_ptr = source.data();
+    utf8::advance(beg_ptr, start.offset, source.data()+source.size());
+    const char* end_ptr = beg_ptr;
+    utf8::advance(end_ptr, end.offset-start.offset, source.data()+source.size());
+
+    return std::string(beg_ptr, end_ptr);
 }

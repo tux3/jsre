@@ -260,13 +260,28 @@ ContinueStatement::ContinueStatement(AstSourceSpan location, AstNode* label)
     setParentOfChildren();
 }
 
-IfStatement::IfStatement(AstSourceSpan location, AstNode* test, AstNode* consequent, AstNode* argument)
+IfStatement::IfStatement(AstSourceSpan location, AstNode* test, AstNode* consequent, AstNode* alternate)
     : AstNode(location, AstNodeType::IfStatement)
     , test{ test }
     , consequent{ consequent }
-    , argument{ argument }
+    , alternate{ alternate }
 {
     setParentOfChildren();
+}
+
+AstNode *IfStatement::getTest()
+{
+    return test;
+}
+
+AstNode *IfStatement::getConsequent()
+{
+    return consequent;
+}
+
+AstNode *IfStatement::getAlternate()
+{
+    return alternate;
 }
 
 SwitchStatement::SwitchStatement(AstSourceSpan location, AstNode* discriminant, std::vector<AstNode*> cases)
@@ -332,12 +347,22 @@ WhileStatement::WhileStatement(AstSourceSpan location, AstNode* test, AstNode* b
     setParentOfChildren();
 }
 
+AstNode *WhileStatement::getBody()
+{
+    return body;
+}
+
 DoWhileStatement::DoWhileStatement(AstSourceSpan location, AstNode* test, AstNode* body)
     : AstNode(location, AstNodeType::DoWhileStatement)
     , test{ test }
     , body{ body }
 {
     setParentOfChildren();
+}
+
+AstNode *DoWhileStatement::getBody()
+{
+    return body;
 }
 
 ForStatement::ForStatement(AstSourceSpan location, AstNode* init, AstNode* test, AstNode* update, AstNode* body)
@@ -355,6 +380,11 @@ VariableDeclaration* ForStatement::getInit()
     return reinterpret_cast<VariableDeclaration*>(init);
 }
 
+AstNode *ForStatement::getBody()
+{
+    return body;
+}
+
 ForInStatement::ForInStatement(AstSourceSpan location, AstNode* left, AstNode* right, AstNode* body)
     : AstNode(location, AstNodeType::ForInStatement)
     , left{ left }
@@ -367,6 +397,16 @@ ForInStatement::ForInStatement(AstSourceSpan location, AstNode* left, AstNode* r
 AstNode* ForInStatement::getLeft()
 {
     return left;
+}
+
+AstNode *ForInStatement::getRight()
+{
+    return right;
+}
+
+AstNode *ForInStatement::getBody()
+{
+    return body;
 }
 
 ForOfStatement::ForOfStatement(AstSourceSpan location, AstNode* left, AstNode* right, AstNode* body, bool isAwait)
@@ -382,6 +422,16 @@ ForOfStatement::ForOfStatement(AstSourceSpan location, AstNode* left, AstNode* r
 AstNode* ForOfStatement::getLeft()
 {
     return left;
+}
+
+AstNode *ForOfStatement::getRight()
+{
+    return right;
+}
+
+AstNode *ForOfStatement::getBody()
+{
+    return body;
 }
 
 Function::Function(AstSourceSpan location, AstNodeType type, AstNode* id, std::vector<AstNode*> params, AstNode* body,

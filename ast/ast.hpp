@@ -209,11 +209,14 @@ private:
 
 class IfStatement : public AstNode {
 public:
-    IfStatement(AstSourceSpan location, AstNode* test, AstNode* consequent, AstNode* argument);
+    IfStatement(AstSourceSpan location, AstNode* test, AstNode* consequent, AstNode* alternate);
     virtual std::vector<AstNode*> getChildren() override;
+    AstNode* getTest();
+    AstNode* getConsequent();
+    AstNode* getAlternate();
 
 private:
-    AstNode *test, *consequent, *argument;
+    AstNode *test, *consequent, *alternate;
 };
 
 class SwitchStatement : public AstNode {
@@ -269,6 +272,7 @@ private:
 class WhileStatement : public AstNode {
 public:
     WhileStatement(AstSourceSpan location, AstNode* test, AstNode* body);
+    AstNode* getBody();
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
@@ -278,6 +282,7 @@ private:
 class DoWhileStatement : public AstNode {
 public:
     DoWhileStatement(AstSourceSpan location, AstNode* test, AstNode* body);
+    AstNode* getBody();
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
@@ -721,6 +726,7 @@ class ForStatement : public AstNode {
 public:
     ForStatement(AstSourceSpan location, AstNode* init, AstNode* test, AstNode* update, AstNode* body);
     VariableDeclaration* getInit();
+    AstNode* getBody();
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
@@ -731,6 +737,8 @@ class ForInStatement : public AstNode {
 public:
     ForInStatement(AstSourceSpan location, AstNode* left, AstNode* right, AstNode* body);
     AstNode* getLeft();
+    AstNode* getRight();
+    AstNode* getBody();
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
@@ -741,6 +749,8 @@ class ForOfStatement : public AstNode {
 public:
     ForOfStatement(AstSourceSpan location, AstNode* left, AstNode* right, AstNode* body, bool isAwait);
     AstNode* getLeft();
+    AstNode* getRight();
+    AstNode* getBody();
     virtual std::vector<AstNode*> getChildren() override;
 
 private:

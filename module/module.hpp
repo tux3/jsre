@@ -23,6 +23,7 @@ public:
     v8::Local<v8::Module> getExecutableModule();
     v8::Local<v8::Module> getExecutableES6Module();
     int getCompiledModuleIdentityHash();
+    const std::string& getOriginalSource() const;
     virtual std::string getPath() const override;
 
     std::unordered_map<Identifier*, std::vector<Identifier*>> getLocalXRefs();

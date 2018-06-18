@@ -82,7 +82,7 @@ vector<AstNode*> ContinueStatement::getChildren() {
 }
 
 vector<AstNode*> IfStatement::getChildren() {
-    return {test, consequent, argument};
+    return {test, consequent, alternate};
 }
 
 vector<AstNode*> SwitchStatement::getChildren() {
