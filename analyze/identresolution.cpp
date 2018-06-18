@@ -286,7 +286,6 @@ IdentifierResolutionResult resolveModuleIdentifiers(v8::Local<v8::Context> conte
         if (global->Has(nameStr))
             continue;
 
-        warn(*elem.second, "Couldn't find declaration for top-level identifier "+name);
         missingGlobalIdentifiers.push_back(std::move(name));
     }
 

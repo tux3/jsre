@@ -18,7 +18,7 @@ struct IdentifierResolutionResult
 /**
  * Tries to find the local declaration for every identifier in the AST
  *
- * Warns about top-level identifiers that does not have a declaration, and returns them.
+ * Returns top-level identifiers that does not have a declaration.
  * Those are the identifiers that would cause a ReferecenceError when evaluating or importing the module
  *
  * Returns a map of identifiers to their point of declaration in the AST.
