@@ -3,6 +3,7 @@
 #include "module/module.hpp"
 #include <iostream>
 #include <cstdlib>
+#include <filesystem>
 
 using namespace std;
 
@@ -22,9 +23,9 @@ void setSuggest(bool enable)
 static void printLocation(AstNode& node)
 {
     Module& mod = node.getParentModule();
-    cout << mod.getPath();
+    string relativePath = filesystem::relative(mod.getPath());
     auto loc = node.getLocation().start;
-    cout << ':' << loc.line << ':' <<loc.column << ": ";
+    cout << relativePath << ':' << loc.line << ':' <<loc.column << ": ";
 }
 
 void trace(const string &msg)
