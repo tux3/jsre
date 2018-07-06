@@ -1,9 +1,19 @@
 cmake_minimum_required(VERSION 3.2 FATAL_ERROR)
 project(jsre)
 
-# TODO: Make a half-hearted attempt at calling a FindV8.cmake or pkg-config
-set(V8_LIBS_DIR "/code/build/v8/v8/out.gn/x64.release")
-set(V8_INCLUDE_DIR "/code/build/v8/v8/include")
+## Config
+set(V8_INCLUDE_DIR "" CACHE STRING "v8 include directory")
+if ("${V8_INCLUDE_DIR}" STREQUAL "")
+    message(FATAL_ERROR "V8_INCLUDE_DIR must be set")
+endif()
+set(V8_LIBS_DIR "" CACHE STRING "v8 libs directory")
+if ("${V8_LIBS_DIR}" STREQUAL "")
+    message(FATAL_ERROR "V8_LIBS_DIR must be set")
+endif()
+set(V8_SNAPSHOTS_DIR "" CACHE STRING "v8 binary snapshots directory")
+if ("${V8_SNAPSHOTS_DIR}" STREQUAL "")
+    message(FATAL_ERROR "V8_SNAPSHOTS_DIR must be set")
+endif()
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
 
@@ -51,7 +61,7 @@ target_compile_options(native_modules_js PRIVATE "-I${PROJECT_SOURCE_DIR}/module
 
 ## v8 startup snapshots target
 function(add_v8_startup_snapshot basename_list)
-    set(SNAPSHOT_BASE_PATH ${V8_LIBS_DIR})
+    set(SNAPSHOT_BASE_PATH ${V8_SNAPSHOTS_DIR})
     foreach(basename ${ARGV})
         set(SNAPSHOT_NAME ${basename})
         configure_file(${PROJECT_SOURCE_DIR}/v8_startup_snapshots.asm.in "${PROJECT_BINARY_DIR}/generated/snapshots/${basename}.asm")
@@ -65,7 +75,7 @@ add_v8_startup_snapshot(natives_blob snapshot_blob)
 
 add_library(startup_snapshots STATIC "${STARTUP_SNAPSHOTS_ASM_SRCS}")
 # A bug in NASM requires a / at the end of include paths, and CMake always strips slashes, so we pass it as an opaque option
-target_compile_options(startup_snapshots PRIVATE "-I${V8_LIBS_DIR}/")
+target_compile_options(startup_snapshots PRIVATE "-I${V8_SNAPSHOTS_DIR}/")
 
 ## Main project target
 function(add_headers_sources basename_list)
@@ -89,15 +99,11 @@ add_headers_sources(
     queries/maybe queries/dataflow
 )
 
-find_library(V8_LIB_V8 NAMES v8 PATHS ${V8_LIBS_DIR})
-find_library(V8_LIB_BASE NAMES v8_libbase PATHS ${V8_LIBS_DIR})
-find_library(V8_LIB_PLATFORM NAMES v8_libplatform PATHS ${V8_LIBS_DIR})
-
 find_library(ICUUC_LIB NAMES icuuc)
 find_library(ICUI18N_LIB NAMES icui18n)
 
 add_executable(${PROJECT_NAME} ${SRCS})
 target_include_directories(${PROJECT_NAME} PRIVATE ${V8_INCLUDE_DIR} ${PROJECT_SOURCE_DIR} ${PROJECT_BINARY_DIR}/generated)
-target_link_libraries(${PROJECT_NAME} PRIVATE pthread babel native_modules_js startup_snapshots ${V8_LIB_V8} ${V8_LIB_BASE} ${V8_LIB_PLATFORM} ${ICUUC_LIB} ${ICUI18N_LIB} "stdc++fs")
+target_link_libraries(${PROJECT_NAME} PRIVATE pthread babel native_modules_js startup_snapshots -L${V8_LIBS_DIR} v8 v8_libbase v8_libplatform ${ICUUC_LIB} ${ICUI18N_LIB} "stdc++fs")
 set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD 17
                                                  CXX_STANDARD_REQUIRED 1)
