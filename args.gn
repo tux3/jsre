@@ -4,8 +4,13 @@ target_cpu = "x64"
 is_debug = false
 
 # Simpler embedding by depending only on system libraries and the v8_* libs
-is_component_build = true
 use_sysroot = false
 use_custom_libcxx = false
 v8_enable_i18n_support = false # Removes dependency on custom libicu
 v8_use_snapshot = true # Use binary shapshot files
+is_component_build = false
+v8_static_library = true
+
+# We don't mind same-process side-channels, we don't have any sensitive data in memory
+v8_untrusted_code_mitigations = false
+
