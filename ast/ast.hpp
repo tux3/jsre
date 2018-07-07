@@ -293,6 +293,8 @@ class Function : public AstNode {
 public:
     Identifier* getId();
     BlockStatement* getBody();
+    TypeAnnotation* getReturnType();
+    AstNode* getReturnTypeAnnotation();
     const std::vector<Identifier*>& getParams();
     bool isGenerator();
     bool isAsync();
@@ -934,7 +936,7 @@ private:
 class TypeAnnotation : public AstNode {
 public:
     TypeAnnotation(AstSourceSpan location, AstNode* typeAnnotation);
-    Identifier* getTypeAnnotation();
+    AstNode* getTypeAnnotation();
     virtual std::vector<AstNode*> getChildren() override;
 
 private:

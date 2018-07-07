@@ -419,7 +419,8 @@ AstNode *resolveIdentifierDeclaration(Identifier &identifier)
     if (it == resolvedIds.end())
         return nullptr;
 
-    AstNode* decl = it->second->getParent();
+    AstNode* declId = it->second;
+    AstNode* decl = declId->getParent();
     while (decl->getType() == AstNodeType::ImportDefaultSpecifier
             || decl->getType() == AstNodeType::ImportSpecifier) {
         decl = resolveImportedIdentifierDeclaration(*decl);
@@ -427,5 +428,11 @@ AstNode *resolveIdentifierDeclaration(Identifier &identifier)
             return nullptr;
     }
 
+    // We consider parameters of a function to be their own declaration, not the function!
+    if (isFunctionNode(*decl)) {
+        Function* declFun = (Function*)decl;
+        if (declFun->getId() != declId)
+            return declId;
+    }
     return decl;
 }

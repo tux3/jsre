@@ -457,6 +457,18 @@ bool Function::isAsync()
     return async;
 }
 
+TypeAnnotation *Function::getReturnType()
+{
+    return returnType;
+}
+
+AstNode *Function::getReturnTypeAnnotation()
+{
+    if (TypeAnnotation* returnType = getReturnType())
+        return returnType->getTypeAnnotation();
+    return nullptr;
+}
+
 Identifier* Function::getId()
 {
     return reinterpret_cast<Identifier*>(id);
@@ -1029,12 +1041,22 @@ TypeAnnotation::TypeAnnotation(AstSourceSpan location, AstNode *typeAnnotation)
     setParentOfChildren();
 }
 
+AstNode *TypeAnnotation::getTypeAnnotation()
+{
+    return typeAnnotation;
+}
+
 GenericTypeAnnotation::GenericTypeAnnotation(AstSourceSpan location, AstNode *id, AstNode *typeParameters)
     : AstNode(location, AstNodeType::GenericTypeAnnotation)
     , id{ id }
     , typeParameters{ typeParameters }
 {
     setParentOfChildren();
+}
+
+Identifier *GenericTypeAnnotation::getId()
+{
+    return reinterpret_cast<Identifier*>(id);
 }
 
 StringTypeAnnotation::StringTypeAnnotation(AstSourceSpan location)

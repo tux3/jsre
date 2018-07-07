@@ -51,6 +51,10 @@ AstNode* resolveImportedIdentifierDeclaration(AstNode& importSpec);
  * Note that if the identifier is declared as a variable, we do return the variable declarator node, and not its initializer (if any)!
  *
  * Return nullptr if this import specifier refers to a native module, or if the declaration couldn't be found.
+ *
+ * WARNING: The identifier is not necessarily the name of the returned declaration, it could also be another name introduce by the declaration!
+ *          In particular for Function* nodes, we consider that the parameters are not declared by the parent functions, but declare themselves
+ *          Otherwise callers couldn't tell whether the identifier refers to the function or its argument: `function test(test) { return test }`
  */
 AstNode* resolveIdentifierDeclaration(Identifier& identifier);
 

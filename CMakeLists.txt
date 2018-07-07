@@ -96,7 +96,7 @@ add_headers_sources(
     ast/ast ast/parse ast/import ast/location ast/walk
     transform/blank transform/flow
     analyze/identresolution analyze/astqueries analyze/unused analyze/missingawait analyze/conditionals
-    queries/maybe queries/dataflow
+    queries/maybe queries/dataflow queries/types
 )
 
 find_library(ICUUC_LIB NAMES icuuc)

@@ -6,6 +6,7 @@
 #include "analyze/astqueries.hpp"
 #include "analyze/identresolution.hpp"
 #include "queries/dataflow.hpp"
+#include "queries/types.hpp"
 
 using namespace std;
 
@@ -27,25 +28,26 @@ void findMissingAwaits(Module &module)
         AstNode* resolvedCallee = resolveIdentifierDeclaration(*callee);
         if (!resolvedCallee)
             return;
+        // The callee could be a (function/callable) parameter declared in the parent function, we don't handle that at all currently
+        // TODO: Use the query system to directly ask for the type of the result of the call expression (and whether it's a Promise)
         if (!isFunctionNode(*resolvedCallee))
             return;
-        auto resolvedFunction = (Function*)resolvedCallee;
-        if (!resolvedFunction->isAsync())
+        if (returnsPromiseType((Function&)*resolvedCallee) != Tribool::Yep)
             return;
 
         if (isReturnedValue(call) == Tribool::Yep) {
             AstNode* parent = &call;
             while (parent && !isFunctionNode(*parent))
                 parent = parent->getParent();
-            auto parentFunction = (Function*)parent;
-            if (parentFunction->isAsync())
+            if (returnsPromiseType((Function&)*parent) == Tribool::Yep)
                 return;
-            // TODO: If the function has a flow annotation for a Promise<> return type, we should return
+
+            suggest(*calleeNode, "Function returns a promise, not a value. Make the function async, or add a type annotation."s);
+        } else {
+            // TODO: If the promise is assigned to a variable, track the use of that variable and warn if we treat it like a T instead of a Promise<T>
+            // TODO: If we call .then() or .catch() on the promise at any point, don't say anything
+            suggest(*calleeNode, "Possible missing await"s);
         }
-
-        // TODO: If the promise is assigned to a variable, track the use of that variable and warn if we treat it like a T instead of a Promise<T>
-
-        suggest(*calleeNode, "Possible missing await"s);
     });
 
 }
