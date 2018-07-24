@@ -114,16 +114,8 @@ void Module::resolveImportedIdentifiers()
         return;
     importedIdentifierResolutionDone = true;
 
-    // TODO: It's time to take advantage of the import & module system we painstakingly build!
-    // Let's resolve cross-file references.
-    //
-    // Make a function that takes an ES6 ImportSpecifier and returns the declaration of the exported identifier in the imported module
-    // And we don't want to return the node at the exported identifier, but the declaration of the local identifier in the imported module
-
-    //trace("Resolving imported identifiers for module "+path.string());
-
     walkAst(getAst(), [&](AstNode& node){
-        AstNode* declNode = resolveImportedIdentifierDeclaration(node);
+        resolveImportedIdentifierDeclaration(node);
     }, [&](AstNode& node) {
         if (node.getType() == AstNodeType::ImportDeclaration)
             return WalkDecision::SkipInto;
