@@ -83,7 +83,7 @@ void error(AstNode &node, const string &msg)
 void fatal(const string &msg)
 {
     cout << "Error: " << msg << endl;
-    exit(EXIT_FAILURE);
+    abort();
 }
 
 void fatal(AstNode &node, const string &msg)
