@@ -163,7 +163,7 @@ v8::Local<v8::Module> Module::compileModuleFromSource(const string& filename, co
         reportV8Exception(isolate, &trycatch);
         throw runtime_error("Failed to compile module");
     }
-    return module;
+    return handleScope.Escape(module);
 }
 
 v8::Local<v8::Module> Module::getCompiledModule()
