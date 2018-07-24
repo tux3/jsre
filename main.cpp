@@ -50,6 +50,10 @@ int main(int argc, char* argv[])
     setDebug(debug);
     setSuggest(suggest);
 
+    // Start real work
+    IsolateWrapper isolateWrapper;
+    startParsingThreads();
+
     fs::path argPath(argv[optind]);
     if (argPath.is_relative())
         argPath = "./" / argPath; // In JS relative imports look like "./foo/bar" not "foo/bar", otherwise it refers to something in mode_modules
@@ -64,10 +68,6 @@ int main(int argc, char* argv[])
         singleFile = true;
     }
 
-    // Start real work
-    startParsingThreads();
-
-    IsolateWrapper isolateWrapper;
     Module& mainModule = (Module&)ModuleResolver::getModule(isolateWrapper, fs::current_path(), argPath, true);
 
     if (singleFile) {
