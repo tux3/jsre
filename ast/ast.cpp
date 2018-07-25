@@ -1302,9 +1302,10 @@ const std::vector<TypeParameter *> &TypeParameterDeclaration::getParams()
     return (const std::vector<TypeParameter *> &)params;
 }
 
-TypeParameter::TypeParameter(AstSourceSpan location, std::string name)
+TypeParameter::TypeParameter(AstSourceSpan location, std::string name, AstNode *bound)
     : AstNode(location, AstNodeType::TypeParameter)
     , name{ new Identifier(location, move(name), nullptr, false) }
+    , bound{ bound }
 {
     setParentOfChildren();
 }

@@ -1173,12 +1173,13 @@ private:
 
 class TypeParameter : public AstNode {
 public:
-    TypeParameter(AstSourceSpan location, std::string name);
+    TypeParameter(AstSourceSpan location, std::string name, AstNode* bound);
     Identifier* getName();
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
     Identifier* name; // We pretend our name is an identifier for consistency
+    AstNode* bound;
 };
 
 class TypeCastExpression : public AstNode {

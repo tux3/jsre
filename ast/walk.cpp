@@ -382,6 +382,6 @@ vector<AstNode*> InterfaceExtends::getChildren()
 
 vector<AstNode*> TypeParameter::getChildren()
 {
-    return {name};
+    return {name, bound};
 }
 

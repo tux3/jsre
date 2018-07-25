@@ -121,7 +121,7 @@ AstNode* importChildOrNullptr(const Local<Object>& node, const char* name)
     auto childNode = tryGetVal(node, name);
     if (!childNode.has_value())
         return nullptr;
-    else if (childNode.value()->IsNull())
+    else if (childNode.value()->IsNull() || childNode.value()->IsUndefined())
         return nullptr;
     else
         return importNode(childNode->As<Object>());
@@ -951,7 +951,7 @@ AstNode* importTypeParameterDeclaration(const Local<Object>& node, AstSourceSpan
 
 AstNode* importTypeParameter(const Local<Object>& node, AstSourceSpan& loc)
 {
-    return new TypeParameter(loc, getStr(node, "name"));
+    return new TypeParameter(loc, getStr(node, "name"), importChildOrNullptr(node, "bound"));
 }
 
 AstNode* importTypeAlias(const Local<Object>& node, AstSourceSpan& loc)
