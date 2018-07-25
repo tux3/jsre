@@ -72,7 +72,10 @@ static double getNumber(const Local<Object>& node, const char* key)
 static optional<string> tryGetStr(const Local<Object>& node, const char* key)
 {
     Isolate* isolate = node->GetIsolate();
-    auto val = getVal(node, key);
+    auto maybeVal = tryGetVal(node, key);
+    if (!maybeVal.has_value())
+        return nullopt;
+    const auto& val = maybeVal.value();
     if (val->IsNullOrUndefined())
         return nullopt;
     assert(val->IsString());
@@ -752,13 +755,15 @@ AstNode* importImportDeclaration(const Local<Object>& node, AstSourceSpan& loc)
 {
     using Kind = ImportDeclaration::Kind;
     Kind kind;
-    string kindStr = getStr(node, "importKind");
-    if (kindStr == "value")
+    auto kindStr = tryGetStr(node, "importKind");
+    if (!kindStr.has_value())
+        kind = Kind::None;
+    else if (*kindStr == "value")
         kind = Kind::Value;
-    else if (kindStr == "type")
+    else if (*kindStr == "type")
         kind = Kind::Type;
     else
-        throw runtime_error("Unknown import declaration kind " + kindStr);
+        throw runtime_error("Unknown import declaration kind " + *kindStr);
 
     return new ImportDeclaration(loc, importChildArray(node, "specifiers"), importChild(node, "source"), kind);
 }

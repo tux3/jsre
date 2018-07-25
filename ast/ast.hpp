@@ -827,6 +827,7 @@ public:
     enum class Kind {
         Value,
         Type,
+        None,
     };
 
 public:
