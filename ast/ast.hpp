@@ -292,7 +292,7 @@ private:
 class Function : public AstNode {
 public:
     Identifier* getId();
-    BlockStatement* getBody();
+    AstNode* getBody();
     TypeAnnotation* getReturnType();
     AstNode* getReturnTypeAnnotation();
     const std::vector<Identifier*>& getParams();

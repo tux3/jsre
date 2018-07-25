@@ -474,9 +474,9 @@ Identifier* Function::getId()
     return reinterpret_cast<Identifier*>(id);
 }
 
-BlockStatement* Function::getBody()
+AstNode *Function::getBody()
 {
-    return reinterpret_cast<BlockStatement*>(body);
+    return body;
 }
 
 const std::vector<Identifier*>& Function::getParams()
