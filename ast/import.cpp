@@ -137,9 +137,13 @@ vector<T*> importChildArray(const Local<Object>& node, const char* name)
 
     vector<T*> result;
     result.reserve(len);
-    for (int  i=len-1; i>=0; --i) {
-        auto elem = importNode(arr->Get(i).As<Object>());
-        result.push_back(reinterpret_cast<T*>(elem));
+    for (int i=0; i<len; ++i) {
+        auto elem = arr->Get(i).As<Object>();
+        if (elem->IsNull()) {
+            result.push_back(nullptr);
+        } else {
+            result.push_back(reinterpret_cast<T*>(importNode(elem)));
+        }
     }
 
     return result;

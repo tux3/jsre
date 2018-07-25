@@ -394,6 +394,7 @@ public:
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
+    // NOTE: Some of the elements might be nullptrs! E.g. [1,,3] result in {NumericLiteral*,nullptr,NumericLiteral*}
     std::vector<AstNode*> elements;
 };
 
