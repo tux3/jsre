@@ -3,6 +3,7 @@
 #include "module/moduleresolver.hpp"
 #include "reporting.hpp"
 #include "ast/parse.hpp"
+#include "utils.hpp"
 #include <filesystem>
 #include <getopt.h>
 #include <iostream>
@@ -15,7 +16,7 @@ namespace fs = filesystem;
 
 void helpAndDie(const char* selfPath)
 {
-    cout << "Usage: " << selfPath << " [-s] [-d] <file.js | project_dir>" << endl;
+    cout << "Usage: " << selfPath << " [-s] [-d] <file.js | package.json | project_dir>" << endl;
     exit(EXIT_FAILURE);
 }
 
@@ -52,34 +53,31 @@ int main(int argc, char* argv[])
 
     // Start real work
     IsolateWrapper isolateWrapper;
+    vector<Module*> modulesToAnalyze;
     startParsingThreads();
 
     fs::path argPath(argv[optind]);
     if (argPath.is_relative())
         argPath = "./" / argPath; // In JS relative imports look like "./foo/bar" not "foo/bar", otherwise it refers to something in mode_modules
 
-    fs::path mainFilePath;
-    bool singleFile;
     if (fs::is_directory(argPath)) {
-        mainFilePath = ModuleResolver::getProjectMainFile(argPath);
-        singleFile = false;
-    } else {
-        mainFilePath = argPath;
-        singleFile = true;
-    }
-
-    Module& mainModule = (Module&)ModuleResolver::getModule(isolateWrapper, fs::current_path(), argPath, true);
-
-    if (singleFile) {
-        mainModule.analyze();
-    } else {
+        vector<string> sourceFiles;
+        findSourceFiles(argPath.lexically_normal(), sourceFiles);
+        for (auto filePath : sourceFiles)
+            modulesToAnalyze.push_back((Module*)&ModuleResolver::getModule(isolateWrapper, argPath, filePath, true));
+    } else if (argPath.filename() == "package.json") {
+        ModuleResolver::getProjectMainFile(argPath.remove_filename());
         cout << "Resolving project imports..." << endl;
+        Module& mainModule = (Module&)ModuleResolver::getModule(isolateWrapper, fs::current_path(), argPath, true);
         mainModule.resolveProjectImports(argPath); // Loads all the project modules (and other dependencies)
-        vector<Module*> projectModules = ModuleResolver::getLoadedProjectModules(argPath);
-        cout << "Starting analysis..." << endl;
-        for (Module* module : projectModules)
-            module->analyze();
+        modulesToAnalyze = ModuleResolver::getLoadedProjectModules(argPath);
+    } else {
+        modulesToAnalyze.push_back((Module*)&ModuleResolver::getModule(isolateWrapper, fs::current_path(), argPath, true));
     }
+
+    cout << "Starting analysis..." << endl;
+    for (Module* module : modulesToAnalyze)
+        module->analyze();
 
     // Cleanup
     stopParsingThreads();

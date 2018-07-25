@@ -76,6 +76,21 @@ std::string readFileStr(const char* path)
     return str;
 }
 
+void findSourceFiles(const fs::path& base, vector<string>& results)
+{
+    if(!fs::exists(base) || !fs::is_directory(base))
+        return;
+
+    for (fs::recursive_directory_iterator it{base}, end; it != end; ++it) {
+        if (fs::is_regular_file(*it)) {
+            if (it->path().extension() == ".js")
+                results.push_back(it->path());
+        } else if (it->path().filename() == "node_modules") {
+                it.disable_recursion_pending();
+        }
+    }
+}
+
 void reportV8Exception(v8::Isolate* isolate, v8::TryCatch* try_catch)
 {
     v8::HandleScope handle_scope(isolate);

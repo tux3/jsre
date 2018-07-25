@@ -11,6 +11,8 @@
 #include <fstream>
 #include <v8.h>
 
+#include "module/module.hpp"
+
 using namespace std;
 
 extern "C" {
@@ -29,7 +31,7 @@ static const char babelCompileCacheFileName[] = "babel_compile_cache.bin";
 static vector<uint8_t> babelCompileCacheBackingVector;
 static atomic<v8::ScriptCompiler::CachedData*> babelCompileCache;
 
-static atomic_flag workersStarted{false};
+static atomic_int workersStarted{0};
 static atomic_bool workersStopFlag{false};
 static vector<thread> workers;
 static vector<ParseWorkPackage> workQueue;
@@ -50,6 +52,7 @@ static void worker_thread_loop()
     Local<Object> babelObj = makeBabelObject(isolateWrapper);
 
     unique_lock condvar_lock(condvar_mutex);
+    workersStarted++;
 
     while (!workersStopFlag.load(memory_order::memory_order_acquire)) {
         if (workQueue.empty()) {
@@ -73,12 +76,13 @@ static void worker_thread_loop()
         condvar_lock.lock();
     }
 
+    workersStarted--;
     condvar_mutex.unlock();
 }
 
 std::future<AstRoot*> parseSourceScriptAsync(Module &parentModule, const std::string& script)
 {
-    assert(workersStarted.test_and_set() == true);
+    assert(workersStarted > 0);
     lock_guard condvar_lock(condvar_mutex);
 
     promise<AstRoot*> promise;
@@ -200,14 +204,19 @@ static void writeBabelCompileCacheFile(v8::ScriptCompiler::CachedData* cachedDat
     tryWriteCacheFile(babelCompileCacheFileName, data);
 }
 
+static unsigned workersCount()
+{
+    return std::max(4U, thread::hardware_concurrency()/2);
+}
+
 static void prepareOtherThreads()
 {
     loadBabelCompileCacheFile();
 
     workersStopFlag.store(false, memory_order::memory_order_release);
 
-    auto count = std::max(4U, thread::hardware_concurrency()/2) - 1;
-    for (decltype(count) i = 0; i<count; ++i)
+    auto count = workersCount();
+    for (decltype(count) i = 0; i<count-1; ++i)
         workers.emplace_back(worker_thread_loop);
 
     worker_thread_loop();
@@ -215,15 +224,15 @@ static void prepareOtherThreads()
 
 void startParsingThreads()
 {
-    if (true == workersStarted.test_and_set())
-        return;
-
     workers.emplace_back(prepareOtherThreads);
 }
 
 void stopParsingThreads()
 {
-    workersStarted.clear(); // If someone is still trying to push work, we'll make them assert
+    // Wait for the threads to be fully started before notify_all, should not take long and avoids deadlock in a crash-proof way.
+    while (workersStarted != (int)workersCount())
+        ;
+
     workersStopFlag.store(true, memory_order::memory_order_release);
 
     {
