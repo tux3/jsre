@@ -45,8 +45,15 @@ void findMissingAwaits(Module &module)
             suggest(*calleeNode, "Function returns a promise, not a value. Make the function async, or add a type annotation."s);
         } else {
             // TODO: If the promise is assigned to a variable, track the use of that variable and warn if we treat it like a T instead of a Promise<T>
-            // TODO: If we call .then() or .catch() on the promise at any point, don't say anything
-            suggest(*calleeNode, "Possible missing await"s);
+
+            // If we immediately call .then() or .catch() on the result, nothing to report
+            if (call.getParent()->getType() == AstNodeType::MemberExpression
+                    && call.getParent()->getParent()->getType() == AstNodeType::CallExpression) {
+                auto name = ((MemberExpression*)call.getParent())->getProperty()->getName();
+                if (name == "catch" || name == "then")
+                    return;
+            }
+            warn(*calleeNode, "Possible missing await"s);
         }
     });
 
