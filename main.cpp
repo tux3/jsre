@@ -14,10 +14,19 @@
 using namespace std;
 namespace fs = filesystem;
 
-void helpAndDie(const char* selfPath)
+[[noreturn]]
+void helpAndDie(const char* selfPath, bool fullHelp = false)
 {
-    cout << "Usage: " << selfPath << " [-s] [-d] <file.js | package.json | project_dir>" << endl;
-    exit(EXIT_FAILURE);
+    cout << "Usage: " << selfPath << " [-s] [-d] <file.js | package.json | directory>" << endl;
+    if (!fullHelp)
+        exit(EXIT_FAILURE);
+
+    cout << "  <file.js>        Analyze a single file\n";
+    cout << "  <directory>      Analyze all .js files in this directory (excluding node_modules)\n";
+    cout << "  <package.json>   Analyze all project files imported from the main file\n";
+    cout << "  -s               Show suggestions. Not recommended, as it may include many false positives\n";
+    cout << "  -d               Show debug output\n";
+    exit(EXIT_SUCCESS);
 }
 
 int main(int argc, char* argv[])
@@ -28,7 +37,7 @@ int main(int argc, char* argv[])
 
     bool debug = false;
     bool suggest = false;
-    for (int c; (c = getopt(argc, argv, "ds")) != -1;) {
+    for (int c; (c = getopt(argc, argv, "dsh")) != -1;) {
         switch (c) {
         case 'd':
             debug = true;
@@ -36,6 +45,8 @@ int main(int argc, char* argv[])
         case 's':
             suggest = true;
             break;
+        case 'h':
+            helpAndDie(argv[0], true);
         case '?':
             if (optopt == 'c')
                 fprintf(stderr, "Option -%c requires an argument.\n", optopt);
