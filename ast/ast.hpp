@@ -1239,4 +1239,65 @@ private:
     TypeParameterInstantiation* typeParameters;
 };
 
+class DeclareVariable : public AstNode {
+public:
+    DeclareVariable(AstSourceSpan location, Identifier* id);
+    virtual std::vector<AstNode*> getChildren() override;
+
+private:
+    Identifier* id;
+};
+
+class DeclareFunction : public AstNode {
+public:
+    DeclareFunction(AstSourceSpan location, Identifier* id);
+    virtual std::vector<AstNode*> getChildren() override;
+
+private:
+    Identifier* id;
+};
+
+class DeclareTypeAlias : public AstNode {
+public:
+    DeclareTypeAlias(AstSourceSpan location, Identifier* id, AstNode* right);
+    virtual std::vector<AstNode*> getChildren() override;
+
+private:
+    Identifier* id;
+    AstNode* right;
+};
+
+class DeclareClass : public AstNode {
+public:
+    DeclareClass(AstSourceSpan location, Identifier* id, TypeParameterDeclaration* typeParameters, AstNode* body,
+                 std::vector<InterfaceExtends*> extends, std::vector<InterfaceExtends*> mixins);
+    virtual std::vector<AstNode*> getChildren() override;
+
+private:
+    Identifier* id;
+    TypeParameterDeclaration* typeParameters;
+    AstNode* body;
+    std::vector<InterfaceExtends*> extends;
+    std::vector<InterfaceExtends*> mixins;
+};
+
+class DeclareModule : public AstNode {
+public:
+    DeclareModule(AstSourceSpan location, StringLiteral* id, AstNode* body);
+    virtual std::vector<AstNode*> getChildren() override;
+
+private:
+    StringLiteral* id;
+    AstNode* body;
+};
+
+class DeclareExportDeclaration : public AstNode {
+public:
+    DeclareExportDeclaration(AstSourceSpan location, AstNode* declaration);
+    virtual std::vector<AstNode*> getChildren() override;
+
+private:
+    AstNode* declaration;
+};
+
 #endif // AST_HPP

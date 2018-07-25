@@ -14,6 +14,14 @@ std::string stripFlowTypes(const std::string &source, AstNode &ast)
     auto isTypeAnnotation = [](AstNode& node) {
         return node.getType() == AstNodeType::TypeAnnotation;
     };
+    auto isFlowLibraryDeclaration = [](AstNode& node) {
+        return node.getType() == AstNodeType::DeclareVariable
+                || node.getType() == AstNodeType::DeclareFunction
+                || node.getType() == AstNodeType::DeclareClass
+                || node.getType() == AstNodeType::DeclareTypeAlias
+                || node.getType() == AstNodeType::DeclareModule
+                || node.getType() == AstNodeType::DeclareExportDeclaration;
+    };
     auto isTypeAliasOrInterface = [](AstNode& node) {
         return node.getType() == AstNodeType::TypeAlias
                 || node.getType() == AstNodeType::InterfaceDeclaration;
@@ -52,7 +60,8 @@ std::string stripFlowTypes(const std::string &source, AstNode &ast)
         } else if (isTypeAnnotation(node)
                    || isTypeAliasOrInterface(node)
                    || isTypeImportExportDeclaration(node)
-                   || isTypeParameterDeclarationOrInstantiation(node)) {
+                   || isTypeParameterDeclarationOrInstantiation(node)
+                   || isFlowLibraryDeclaration(node)) {
             blankNodeFromSource(transformed, node);
         }
     });

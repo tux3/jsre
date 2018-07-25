@@ -114,7 +114,13 @@
     X(ClassImplements)              \
     X(QualifiedTypeIdentifier)      \
     X(InterfaceDeclaration)         \
-    X(InterfaceExtends)
+    X(InterfaceExtends)             \
+    X(DeclareVariable)              \
+    X(DeclareFunction)              \
+    X(DeclareTypeAlias)             \
+    X(DeclareClass)                 \
+    X(DeclareModule)                \
+    X(DeclareExportDeclaration)
 
 class AstRoot;
 class AstNode;

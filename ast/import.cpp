@@ -991,3 +991,36 @@ AstNode* importInterfaceExtends(const Local<Object>& node, AstSourceSpan& loc)
 {
     return new InterfaceExtends(loc, (Identifier*)importChild(node, "id"), (TypeParameterInstantiation*)importChildOrNullptr(node, "typeParameters"));
 }
+
+AstNode* importDeclareVariable(const Local<Object>& node, AstSourceSpan& loc)
+{
+    return new DeclareVariable(loc, (Identifier*)importChild(node, "id"));
+}
+
+AstNode* importDeclareFunction(const Local<Object>& node, AstSourceSpan& loc)
+{
+    return new DeclareFunction(loc, (Identifier*)importChild(node, "id"));
+}
+
+AstNode* importDeclareTypeAlias(const Local<Object>& node, AstSourceSpan& loc)
+{
+    return new DeclareTypeAlias(loc, (Identifier*)importChild(node, "id"), importChild(node, "right"));
+}
+
+AstNode* importDeclareClass(const Local<Object>& node, AstSourceSpan& loc)
+{
+    vector<InterfaceExtends*> extends = importChildArray<InterfaceExtends>(node, "extends");
+    vector<InterfaceExtends*> mixins = importChildArray<InterfaceExtends>(node, "mixins");
+    return new DeclareClass(loc, (Identifier*)importChild(node, "id"), (TypeParameterDeclaration*)importChildOrNullptr(node, "typeParameters"),
+                            importChild(node, "body"), move(extends), move(mixins));
+}
+
+AstNode* importDeclareModule(const Local<Object>& node, AstSourceSpan& loc)
+{
+    return new DeclareModule(loc, (StringLiteral*)importChild(node, "id"), importChild(node, "body"));
+}
+
+AstNode* importDeclareExportDeclaration(const Local<Object>& node, AstSourceSpan& loc)
+{
+    return new DeclareExportDeclaration(loc, importChild(node, "declaration"));
+}

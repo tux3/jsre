@@ -385,3 +385,35 @@ vector<AstNode*> TypeParameter::getChildren()
     return {name, bound};
 }
 
+std::vector<AstNode *> DeclareVariable::getChildren()
+{
+    return {id};
+}
+
+std::vector<AstNode *> DeclareFunction::getChildren()
+{
+    return {id};
+}
+
+std::vector<AstNode *> DeclareTypeAlias::getChildren()
+{
+    return {id, right};
+}
+
+vector<AstNode*> DeclareClass::getChildren()
+{
+    return concat(concat({id, (AstNode*)typeParameters, body},
+                         (vector<AstNode*>&)extends),
+                  (vector<AstNode*>&)mixins);
+}
+
+std::vector<AstNode *> DeclareModule::getChildren()
+{
+    return {id, body};
+}
+
+std::vector<AstNode *> DeclareExportDeclaration::getChildren()
+{
+    return {declaration};
+}
+

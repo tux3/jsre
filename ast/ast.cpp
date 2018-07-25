@@ -1373,3 +1373,52 @@ InterfaceExtends::InterfaceExtends(AstSourceSpan location, Identifier *id, TypeP
 {
     setParentOfChildren();
 }
+
+DeclareVariable::DeclareVariable(AstSourceSpan location, Identifier *id)
+    : AstNode(location, AstNodeType::DeclareVariable)
+    , id{ id }
+{
+    setParentOfChildren();
+}
+
+DeclareFunction::DeclareFunction(AstSourceSpan location, Identifier *id)
+    : AstNode(location, AstNodeType::DeclareFunction)
+    , id{ id }
+{
+    setParentOfChildren();
+}
+
+DeclareTypeAlias::DeclareTypeAlias(AstSourceSpan location, Identifier *id, AstNode* right)
+    : AstNode(location, AstNodeType::DeclareTypeAlias)
+    , id{ id }
+    , right{ right }
+{
+    setParentOfChildren();
+}
+
+DeclareClass::DeclareClass(AstSourceSpan location, Identifier *id, TypeParameterDeclaration *typeParameters,
+                           AstNode *body, std::vector<InterfaceExtends *> extends, std::vector<InterfaceExtends *> mixins)
+    : AstNode(location, AstNodeType::DeclareClass)
+    , id{ id }
+    , typeParameters{ typeParameters }
+    , body{ body }
+    , extends{ move(extends) }
+    , mixins{ move(mixins) }
+{
+    setParentOfChildren();
+}
+
+DeclareModule::DeclareModule(AstSourceSpan location, StringLiteral *id, AstNode *body)
+    : AstNode(location, AstNodeType::DeclareModule)
+    , id{ id }
+    , body{ body }
+{
+    setParentOfChildren();
+}
+
+DeclareExportDeclaration::DeclareExportDeclaration(AstSourceSpan location, AstNode *declaration)
+    : AstNode(location, AstNodeType::DeclareExportDeclaration)
+    , declaration{ declaration }
+{
+    setParentOfChildren();
+}
