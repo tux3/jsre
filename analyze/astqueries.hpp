@@ -26,4 +26,7 @@ bool isFunctionNode(AstNode& node);
 // True if the node introduces a new lexical scope
 bool isLexicalScopeNode(AstNode& node);
 
+// True if node is equal to reference, or is a child of reference. Node may be null.
+bool isChildOf(AstNode *node, AstNode &reference);
+
 #endif // ASTQUERIES_HPP

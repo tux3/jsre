@@ -90,3 +90,13 @@ bool isLexicalScopeNode(AstNode &node)
     return type == AstNodeType::ClassDeclaration
             || type == AstNodeType::ClassExpression;
 }
+
+bool isChildOf(AstNode* node, AstNode& reference)
+{
+    while (node) {
+        if (node == &reference)
+            return true;
+        node = node->getParent();
+    }
+    return false;
+}

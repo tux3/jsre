@@ -243,7 +243,8 @@ IdentifierResolutionResult resolveModuleIdentifiers(v8::Local<v8::Context> conte
             Identifier& identifier = reinterpret_cast<Identifier&>(node);
             const auto& name = identifier.getName();
             bool found = false;
-            for (const auto& scope : scopeDeclarations) {
+            for (ssize_t i = scopeDeclarations.size()-1; i>=0; --i) {
+                const auto& scope = scopeDeclarations[i];
                 if (auto it = scope.declarations.find(name); it != scope.declarations.end()) {
                     identifierTargets.insert({&identifier, it->second});
                     found = true;
@@ -443,7 +444,11 @@ AstNode *resolveMemberExpression(MemberExpression &expr)
     if (expr.getObject()->getType() != AstNodeType::ThisExpression)
         return nullptr;
 
-    auto propName = expr.getProperty()->getName();
+    // We can't resolve dynamic expressions statically
+    if (expr.getProperty()->getType() != AstNodeType::Identifier)
+        return nullptr;
+
+    auto propName = ((Identifier*)expr.getProperty())->getName();
     AstNode* targetScope = resolveThisExpression((ThisExpression&)*expr.getObject());
     if (!targetScope)
         return nullptr;

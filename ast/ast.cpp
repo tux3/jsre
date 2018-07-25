@@ -101,6 +101,11 @@ RegExpLiteral::RegExpLiteral(AstSourceSpan location, string pattern, string flag
     setParentOfChildren();
 }
 
+const string &RegExpLiteral::getPattern()
+{
+    return pattern;
+}
+
 NullLiteral::NullLiteral(AstSourceSpan location)
     : AstNode(location, AstNodeType::NullLiteral)
 {
@@ -204,6 +209,11 @@ ExpressionStatement::ExpressionStatement(AstSourceSpan location, AstNode* expres
     setParentOfChildren();
 }
 
+AstNode *ExpressionStatement::getExpression()
+{
+    return expression;
+}
+
 BlockStatement::BlockStatement(AstSourceSpan location, std::vector<AstNode*> body)
     : AstNode(location, AstNodeType::BlockStatement)
     , body{ move(body) }
@@ -236,6 +246,11 @@ ReturnStatement::ReturnStatement(AstSourceSpan location, AstNode* argument)
     , argument{ argument }
 {
     setParentOfChildren();
+}
+
+AstNode *ReturnStatement::getArgument()
+{
+    return argument;
 }
 
 LabeledStatement::LabeledStatement(AstSourceSpan location, AstNode* label, AstNode* body)
@@ -560,6 +575,16 @@ UnaryExpression::UnaryExpression(AstSourceSpan location, AstNode* argument, Oper
     setParentOfChildren();
 }
 
+AstNode *UnaryExpression::getArgument()
+{
+    return argument;
+}
+
+UnaryExpression::Operator UnaryExpression::getOperator()
+{
+    return unaryOperator;
+}
+
 UpdateExpression::UpdateExpression(AstSourceSpan location, AstNode* argument, Operator updateOperator, bool isPrefix)
     : AstNode(location, AstNodeType::UpdateExpression)
     , argument{ argument }
@@ -578,6 +603,21 @@ BinaryExpression::BinaryExpression(AstSourceSpan location, AstNode* left, AstNod
     setParentOfChildren();
 }
 
+AstNode *BinaryExpression::getLeft()
+{
+    return left;
+}
+
+AstNode *BinaryExpression::getRight()
+{
+    return right;
+}
+
+BinaryExpression::Operator BinaryExpression::getOperator()
+{
+    return binaryOperator;
+}
+
 AssignmentExpression::AssignmentExpression(AstSourceSpan location, AstNode* left, AstNode* right, Operator assignmentOperator)
     : AstNode(location, AstNodeType::AssignmentExpression)
     , left{ left }
@@ -585,6 +625,16 @@ AssignmentExpression::AssignmentExpression(AstSourceSpan location, AstNode* left
     , assignmentOperator{ assignmentOperator }
 {
     setParentOfChildren();
+}
+
+AstNode *AssignmentExpression::getLeft()
+{
+    return left;
+}
+
+AstNode *AssignmentExpression::getRight()
+{
+    return right;
 }
 
 LogicalExpression::LogicalExpression(AstSourceSpan location, AstNode* left, AstNode* right, Operator logicalOperator)
@@ -596,11 +646,11 @@ LogicalExpression::LogicalExpression(AstSourceSpan location, AstNode* left, AstN
     setParentOfChildren();
 }
 
-MemberExpression::MemberExpression(AstSourceSpan location, AstNode* object, AstNode* property, bool isComputed)
+MemberExpression::MemberExpression(AstSourceSpan location, AstNode* object, AstNode* property, bool computed)
     : AstNode(location, AstNodeType::MemberExpression)
     , object{ object }
     , property{ property }
-    , isComputed{ isComputed }
+    , computed{ computed }
 {
     setParentOfChildren();
 }
@@ -610,9 +660,14 @@ AstNode *MemberExpression::getObject()
     return object;
 }
 
-Identifier *MemberExpression::getProperty()
+AstNode *MemberExpression::getProperty()
 {
-    return reinterpret_cast<Identifier*>(property);
+    return property;
+}
+
+bool MemberExpression::isComputed()
+{
+    return computed;
 }
 
 BindExpression::BindExpression(AstSourceSpan location, AstNode* object, AstNode* callee)
@@ -816,7 +871,7 @@ FunctionDeclaration::FunctionDeclaration(AstSourceSpan location, AstNode* id, ve
     setParentOfChildren();
 }
 
-VariableDeclaration::VariableDeclaration(AstSourceSpan location, vector<AstNode*> declarators, Kind kind)
+VariableDeclaration::VariableDeclaration(AstSourceSpan location, vector<VariableDeclarator*> declarators, Kind kind)
     : AstNode(location, AstNodeType::VariableDeclaration)
     , declarators{ move(declarators) }
     , kind{ kind }
@@ -829,7 +884,7 @@ VariableDeclaration::Kind VariableDeclaration::getKind()
     return kind;
 }
 
-const std::vector<AstNode*>& VariableDeclaration::getDeclarators()
+const std::vector<VariableDeclarator*>& VariableDeclaration::getDeclarators()
 {
     return declarators;
 }

@@ -68,6 +68,7 @@ private:
 class RegExpLiteral : public AstNode {
 public:
     RegExpLiteral(AstSourceSpan location, std::string pattern, std::string flags);
+    const std::string& getPattern();
 
 private:
     std::string pattern, flags;
@@ -137,6 +138,7 @@ private:
 class ExpressionStatement : public AstNode {
 public:
     ExpressionStatement(AstSourceSpan location, AstNode* expression);
+    AstNode* getExpression();
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
@@ -174,6 +176,7 @@ public:
 class ReturnStatement : public AstNode {
 public:
     ReturnStatement(AstSourceSpan location, AstNode* argument);
+    AstNode* getArgument();
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
@@ -423,9 +426,10 @@ public:
         Typeof,
         Void,
         Delete,
-        Throw,
     };
     UnaryExpression(AstSourceSpan location, AstNode* argument, Operator unaryOperator, bool isPrefix);
+    AstNode* getArgument();
+    Operator getOperator();
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
@@ -475,6 +479,9 @@ public:
         Instanceof,
     };
     BinaryExpression(AstSourceSpan location, AstNode* left, AstNode* right, Operator binaryOperator);
+    AstNode* getLeft();
+    AstNode* getRight();
+    Operator getOperator();
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
@@ -499,6 +506,8 @@ public:
         AndEqual,
     };
     AssignmentExpression(AstSourceSpan location, AstNode* left, AstNode* right, Operator assignmentOperator);
+    AstNode* getLeft();
+    AstNode* getRight();
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
@@ -522,14 +531,15 @@ private:
 
 class MemberExpression : public AstNode {
 public:
-    MemberExpression(AstSourceSpan location, AstNode* object, AstNode* property, bool isComputed);
+    MemberExpression(AstSourceSpan location, AstNode* object, AstNode* property, bool computed);
     AstNode* getObject();
-    Identifier* getProperty();
+    AstNode* getProperty();
+    bool isComputed();
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
     AstNode *object, *property;
-    bool isComputed;
+    bool computed;
 };
 
 class BindExpression : public AstNode {
@@ -710,13 +720,13 @@ public:
         Let,
         Const
     };
-    VariableDeclaration(AstSourceSpan location, std::vector<AstNode*> declarators, Kind kind);
+    VariableDeclaration(AstSourceSpan location, std::vector<VariableDeclarator*> declarators, Kind kind);
     Kind getKind();
-    const std::vector<AstNode*>& getDeclarators();
+    const std::vector<VariableDeclarator*>& getDeclarators();
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
-    std::vector<AstNode*> declarators;
+    std::vector<VariableDeclarator*> declarators;
     Kind kind;
 };
 

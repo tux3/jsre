@@ -94,6 +94,7 @@ add_headers_sources(
     v8 isolatewrapper utils global reporting
     module/basicmodule module/nativemodule module/module module/moduleresolver module/native/modules
     ast/ast ast/parse ast/import ast/location ast/walk
+    graph/graph graph/graphbuilder graph/dot graph/type graph/basicblock
     transform/blank transform/flow
     analyze/identresolution analyze/astqueries analyze/unused analyze/missingawait analyze/conditionals
     queries/maybe queries/dataflow queries/types

@@ -447,8 +447,6 @@ AstNode* importUnaryExpression(const Local<Object>& node, AstSourceSpan& loc)
         op = Operator::Void;
     else if (opStr == "delete")
         op = Operator::Delete;
-    else if (opStr == "throw")
-        op = Operator::Throw;
     else
         throw runtime_error("Unknown unary operator " + opStr);
     return new UnaryExpression(loc, importChild(node, "argument"), op, getBool(node, "prefix"));
@@ -703,7 +701,9 @@ AstNode* importVariableDeclaration(const Local<Object>& node, AstSourceSpan& loc
     else
         throw runtime_error("Unknown variable declaration kind " + kindStr);
 
-    return new VariableDeclaration(loc, importChildArray(node, "declarations"), kind);
+    vector<VariableDeclarator*> declarations = importChildArray<VariableDeclarator>(node, "declarations");
+
+    return new VariableDeclaration(loc, move(declarations), kind);
 }
 
 AstNode* importVariableDeclarator(const Local<Object>& node, AstSourceSpan& loc)

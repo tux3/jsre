@@ -210,7 +210,7 @@ vector<AstNode*> ClassPrivateMethod::getChildren() {
 }
 
 vector<AstNode*> VariableDeclaration::getChildren() {
-    return declarators;
+    return (vector<AstNode*>&)declarators;
 }
 
 vector<AstNode*> VariableDeclarator::getChildren() {

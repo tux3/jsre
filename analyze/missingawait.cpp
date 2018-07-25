@@ -66,8 +66,9 @@ void findMissingAwaits(Module &module)
 
             // If we immediately call .then() or .catch() on the result, nothing to report
             if (call.getParent()->getType() == AstNodeType::MemberExpression
+                    && ((MemberExpression*)call.getParent())->getProperty()->getType() == AstNodeType::Identifier
                     && call.getParent()->getParent()->getType() == AstNodeType::CallExpression) {
-                auto name = ((MemberExpression*)call.getParent())->getProperty()->getName();
+                auto name = ((Identifier*)((MemberExpression*)call.getParent())->getProperty())->getName();
                 if (name == "catch" || name == "then")
                     return;
             }
