@@ -84,5 +84,8 @@ int main(int argc, char* argv[])
     // Cleanup
     stopParsingThreads();
 
+    const auto& report = getReportingStatistics();
+    cout << "Found " << report.errors << " error(s), " << report.warnings << " warning(s) and " << report.suggestions << " suggestion(s)." << endl;
+
     return EXIT_SUCCESS;
 }

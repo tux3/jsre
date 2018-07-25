@@ -2,13 +2,24 @@
 #define REPORTING_HPP
 
 #include <string>
+#include <atomic>
 
 class AstNode;
+
+struct ReportingStats {
+    std::atomic_int traces = 0;
+    std::atomic_int suggestions = 0;
+    std::atomic_int warnings = 0;
+    std::atomic_int errors = 0;
+};
 
 // If left to false, trace messages will not be shown
 void setDebug(bool enable);
 // If left to false, suggest messages will not be shown
 void setSuggest(bool enable);
+
+// Returns the current statistics on the number of reports since the start
+const ReportingStats& getReportingStatistics();
 
 void trace(const std::string& msg); //< Debug information.
 void trace(AstNode& node, const std::string& msg); //< Debug information.

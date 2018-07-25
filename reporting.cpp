@@ -10,6 +10,8 @@ using namespace std;
 static bool debugEnabled = false;
 static bool suggestEnabled = false;
 
+static ReportingStats globalStats;
+
 void setDebug(bool enable)
 {
     debugEnabled = enable;
@@ -33,6 +35,7 @@ void trace(const string &msg)
     if (!debugEnabled)
         return;
     cout << "debug: " << msg << endl;
+    globalStats.traces++;
 }
 
 void trace(AstNode &node, const string &msg)
@@ -45,6 +48,7 @@ void trace(AstNode &node, const string &msg)
 
 void suggest(const string &msg)
 {
+    globalStats.suggestions++;
     if (!suggestEnabled)
         return;
     cout << "suggest: " << msg << endl;
@@ -52,15 +56,15 @@ void suggest(const string &msg)
 
 void suggest(AstNode &node, const string &msg)
 {
-    if (!suggestEnabled)
-        return;
-    printLocation(node);
+    if (suggestEnabled)
+        printLocation(node);
     suggest(msg);
 }
 
 void warn(const std::string &msg)
 {
-    cout << "warning: "<<msg<<endl;
+    globalStats.warnings++;
+    cout << "warning: " << msg << endl;
 }
 
 void warn(AstNode &node, const string &msg)
@@ -71,6 +75,7 @@ void warn(AstNode &node, const string &msg)
 
 void error(const string &msg)
 {
+    globalStats.errors++;
     cout << "error: " << msg << endl;
 }
 
@@ -90,4 +95,9 @@ void fatal(AstNode &node, const string &msg)
 {
     printLocation(node);
     fatal(msg);
+}
+
+const ReportingStats &getReportingStatistics()
+{
+    return globalStats;
 }
