@@ -22,12 +22,30 @@ void findMissingAwaits(Module &module)
             return;
 
         AstNode* calleeNode = call.getCallee();
-        if (calleeNode->getType() != AstNodeType::Identifier)
+        AstNode* resolvedCallee;
+        if (calleeNode->getType() == AstNodeType::Identifier) {
+            auto callee = (Identifier*)calleeNode;
+            resolvedCallee = resolveIdentifierDeclaration(*callee);
+        } else if (calleeNode->getType() == AstNodeType::MemberExpression) {
+            auto callee = (MemberExpression*)calleeNode;
+            if (callee->getObject()->getType() != AstNodeType::ThisExpression)
+                return;
+            resolvedCallee = resolveMemberExpression(*callee);
+        } else {
             return;
-        auto callee = (Identifier*)calleeNode;
-        AstNode* resolvedCallee = resolveIdentifierDeclaration(*callee);
+        }
         if (!resolvedCallee)
             return;
+
+        if (resolvedCallee->getType() == AstNodeType::ClassProperty)
+            resolvedCallee = ((ClassProperty*)resolvedCallee)->getValue();
+        else if (resolvedCallee->getType() == AstNodeType::ClassPrivateProperty)
+            resolvedCallee = ((ClassPrivateProperty*)resolvedCallee)->getValue();
+        else if (resolvedCallee->getType() == AstNodeType::VariableDeclarator)
+            resolvedCallee = ((VariableDeclarator*)resolvedCallee)->getInit();
+        if (!resolvedCallee)
+            return;
+
         // The callee could be a (function/callable) parameter declared in the parent function, we don't handle that at all currently
         // TODO: Use the query system to directly ask for the type of the result of the call expression (and whether it's a Promise)
         if (!isFunctionNode(*resolvedCallee))
@@ -42,7 +60,7 @@ void findMissingAwaits(Module &module)
             if (returnsPromiseType((Function&)*parent) == Tribool::Yep)
                 return;
 
-            suggest(*calleeNode, "Function returns a promise, not a value. Make the function async, or add a type annotation."s);
+            warn(*calleeNode, "Function returns a promise, not a value. Make the function async, or add a type annotation."s);
         } else {
             // TODO: If the promise is assigned to a variable, track the use of that variable and warn if we treat it like a T instead of a Promise<T>
 

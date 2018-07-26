@@ -523,6 +523,7 @@ private:
 class MemberExpression : public AstNode {
 public:
     MemberExpression(AstSourceSpan location, AstNode* object, AstNode* property, bool isComputed);
+    AstNode* getObject();
     Identifier* getProperty();
     virtual std::vector<AstNode*> getChildren() override;
 
@@ -590,6 +591,7 @@ private:
 class Class : public AstNode {
 public:
     Identifier* getId();
+    ClassBody* getBody();
     TypeParameterDeclaration* getTypeParameters();
     const std::vector<ClassImplements*>& getImplements();
 
@@ -621,6 +623,7 @@ public:
 class ClassBody : public AstNode {
 public:
     ClassBody(AstSourceSpan location, std::vector<AstNode*> body);
+    const std::vector<AstNode*>& getBody();
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
@@ -631,6 +634,7 @@ class ClassProperty : public AstNode {
 public:
     ClassProperty(AstSourceSpan location, AstNode* key, AstNode* value, TypeAnnotation* typeAnnotation, bool isStatic, bool isComputed);
     Identifier* getKey();
+    AstNode* getValue();
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
@@ -643,6 +647,7 @@ class ClassPrivateProperty : public AstNode {
 public:
     ClassPrivateProperty(AstSourceSpan location, AstNode* key, AstNode* value, TypeAnnotation* typeAnnotation, bool isStatic);
     Identifier* getKey();
+    AstNode* getValue();
     virtual std::vector<AstNode*> getChildren() override;
 
 private:
@@ -719,6 +724,7 @@ class VariableDeclarator : public AstNode {
 public:
     VariableDeclarator(AstSourceSpan location, AstNode* id, AstNode* init);
     Identifier* getId();
+    AstNode* getInit();
     virtual std::vector<AstNode*> getChildren() override;
 
 private:

@@ -8,6 +8,8 @@ class AstNode;
 class AstRoot;
 class Identifier;
 class ImportSpecifier;
+class MemberExpression;
+class ThisExpression;
 
 struct IdentifierResolutionResult
 {
@@ -57,5 +59,31 @@ AstNode* resolveImportedIdentifierDeclaration(AstNode& importSpec);
  *          Otherwise callers couldn't tell whether the identifier refers to the function or its argument: `function test(test) { return test }`
  */
 AstNode* resolveIdentifierDeclaration(Identifier& identifier);
+
+/**
+ * Tries to resolve the static target of a member expression
+ * The primary use case is for resolving member function calls.
+ *
+ * NOTE: This is entirely static, so it will only work in simple cases, and only when the target is an AstNode* (as opposed to a runtime value)
+ *
+ * Returns nullptr if there isn't a static target, or if we couldn't find it.
+ */
+AstNode* resolveMemberExpression(MemberExpression& expr);
+
+/**
+ * Tries to find the static target for a ThisExpression
+ * Since it is static, it won't work inside normal functions, only arrow functions and class methods
+ *
+ * Returns nullptr if there isn't a static target, or if we couldn't find it.
+ */
+AstNode* resolveThisExpression(ThisExpression& thisExpression);
+
+/**
+ * Tries to find the static target for the value a ThisExpression would have inside the lexically scoping node
+ * Since it is static, it won't work on normal functions, only arrow functions and class methods
+ *
+ * Returns nullptr if there isn't a static target, or if we couldn't find it.
+ */
+AstNode* resolveThisValue(AstNode& lexicalScope);
 
 #endif // IDENTRESOLUTION_HPP

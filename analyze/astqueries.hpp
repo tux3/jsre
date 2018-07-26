@@ -23,4 +23,7 @@ bool isFunctionParameterIdentifier(Identifier& node);
 // True if the node is a Function&
 bool isFunctionNode(AstNode& node);
 
+// True if the node introduces a new lexical scope
+bool isLexicalScopeNode(AstNode& node);
+
 #endif // ASTQUERIES_HPP

@@ -81,3 +81,12 @@ bool isFunctionNode(AstNode &node)
             || type == AstNodeType::ClassPrivateMethod
             || type == AstNodeType::ObjectMethod;
 }
+
+bool isLexicalScopeNode(AstNode &node)
+{
+    if (isFunctionNode(node))
+        return true;
+    auto type = node.getType();
+    return type == AstNodeType::ClassDeclaration
+            || type == AstNodeType::ClassExpression;
+}

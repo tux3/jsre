@@ -605,6 +605,11 @@ MemberExpression::MemberExpression(AstSourceSpan location, AstNode* object, AstN
     setParentOfChildren();
 }
 
+AstNode *MemberExpression::getObject()
+{
+    return object;
+}
+
 Identifier *MemberExpression::getProperty()
 {
     return reinterpret_cast<Identifier*>(property);
@@ -687,6 +692,11 @@ Identifier* Class::getId()
     return reinterpret_cast<Identifier*>(id);
 }
 
+ClassBody *Class::getBody()
+{
+    return reinterpret_cast<ClassBody*>(body);
+}
+
 TypeParameterDeclaration *Class::getTypeParameters()
 {
     return typeParameters;
@@ -709,6 +719,11 @@ ClassBody::ClassBody(AstSourceSpan location, std::vector<AstNode*> body)
     , body{ move(body) }
 {
     setParentOfChildren();
+}
+
+const std::vector<AstNode *> &ClassBody::getBody()
+{
+    return body;
 }
 
 ClassMethod::ClassMethod(AstSourceSpan location, AstNode* id, std::vector<AstNode*> params, AstNode* body, AstNode* key,
@@ -761,6 +776,11 @@ Identifier* ClassProperty::getKey()
     return reinterpret_cast<Identifier*>(key);
 }
 
+AstNode *ClassProperty::getValue()
+{
+    return value;
+}
+
 ClassPrivateProperty::ClassPrivateProperty(AstSourceSpan location, AstNode* key, AstNode* value,
                                            TypeAnnotation* typeAnnotation, bool isStatic)
     : AstNode(location, AstNodeType::ClassPrivateProperty)
@@ -775,6 +795,11 @@ ClassPrivateProperty::ClassPrivateProperty(AstSourceSpan location, AstNode* key,
 Identifier* ClassPrivateProperty::getKey()
 {
     return reinterpret_cast<Identifier*>(key);
+}
+
+AstNode *ClassPrivateProperty::getValue()
+{
+    return value;
 }
 
 ClassDeclaration::ClassDeclaration(AstSourceSpan location, AstNode* id, AstNode* superClass, AstNode* body,
@@ -820,6 +845,11 @@ VariableDeclarator::VariableDeclarator(AstSourceSpan location, AstNode* id, AstN
 Identifier *VariableDeclarator::getId()
 {
     return reinterpret_cast<Identifier*>(id);
+}
+
+AstNode *VariableDeclarator::getInit()
+{
+    return init;
 }
 
 SpreadElement::SpreadElement(AstSourceSpan location, AstNode* argument)

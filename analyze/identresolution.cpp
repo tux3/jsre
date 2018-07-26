@@ -436,3 +436,68 @@ AstNode *resolveIdentifierDeclaration(Identifier &identifier)
     }
     return decl;
 }
+
+AstNode *resolveMemberExpression(MemberExpression &expr)
+{
+    // TODO: Handle more than just ThisExpressions, try to lookup the object
+    if (expr.getObject()->getType() != AstNodeType::ThisExpression)
+        return nullptr;
+
+    auto propName = expr.getProperty()->getName();
+    AstNode* targetScope = resolveThisExpression((ThisExpression&)*expr.getObject());
+    if (!targetScope)
+        return nullptr;
+
+    // Currently we only support lookups in class scopes
+    if (targetScope->getType() == AstNodeType::ClassDeclaration
+           || targetScope->getType() == AstNodeType::ClassExpression) {
+        vector<AstNode*> body = ((Class*)targetScope)->getBody()->getBody();
+        for (auto node : body) {
+            if (auto member = (ClassMethod*)node; node->getType() == AstNodeType::ClassMethod && member->getKey()->getName() == propName)
+                return member;
+            else if (auto member = (ClassPrivateMethod*)node; node->getType() == AstNodeType::ClassPrivateMethod && member->getKey()->getName() == propName)
+                return member;
+            else if (auto member = (ClassProperty*)node; node->getType() == AstNodeType::ClassProperty && member->getKey()->getName() == propName)
+                return member;
+            else if (auto member = (ClassPrivateProperty*)node; node->getType() == AstNodeType::ClassPrivateProperty && member->getKey()->getName() == propName)
+                return member;
+        }
+        // TODO: If we don't find the property in the class, it might be in a parent class, check the extends!
+        return nullptr;
+    } else {
+        return nullptr;
+    }
+}
+
+AstNode *resolveThisExpression(ThisExpression &thisExpression)
+{
+    AstNode* parent = &thisExpression;
+    while (parent && !isFunctionNode(*parent))
+        parent = parent->getParent();
+    if (!parent)
+        return nullptr;
+    return resolveThisValue(*parent);
+}
+
+AstNode *resolveThisValue(AstNode &lexicalScope)
+{
+    AstNode* targetScope = lexicalScope.getParent();
+    while (targetScope && !isLexicalScopeNode(*targetScope))
+        targetScope = targetScope->getParent();
+    if (!targetScope)
+        return nullptr;
+
+    if (targetScope->getType() == AstNodeType::ClassDeclaration
+               || targetScope->getType() == AstNodeType::ClassExpression) {
+        return targetScope;
+    } else if (targetScope->getType() == AstNodeType::ArrowFunctionExpression
+               || targetScope->getType() == AstNodeType::ClassMethod
+               || targetScope->getType() == AstNodeType::ClassPrivateMethod
+               || targetScope->getParent()->getType() == AstNodeType::ClassProperty
+               || targetScope->getParent()->getType() == AstNodeType::ClassPrivateProperty) {
+            return resolveThisValue(*targetScope);
+    } else {
+        // Not much we can do in normal functions, since their this value is dynamic
+        return nullptr;
+    }
+}
