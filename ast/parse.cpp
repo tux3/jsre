@@ -82,7 +82,7 @@ static void worker_thread_loop()
 
 std::future<AstRoot*> parseSourceScriptAsync(Module &parentModule, const std::string& script)
 {
-    assert(workersStarted > 0);
+    assert(workersStopFlag.load(memory_order::memory_order_acquire) == false);
     lock_guard condvar_lock(condvar_mutex);
 
     promise<AstRoot*> promise;
