@@ -76,7 +76,7 @@ std::string readFileStr(const char* path)
     return str;
 }
 
-void findSourceFiles(const fs::path& base, vector<string>& results)
+void findSourceFiles(const fs::path& base, vector<fs::path>& results)
 {
     if(!fs::exists(base) || !fs::is_directory(base))
         return;

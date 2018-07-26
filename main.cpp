@@ -72,10 +72,10 @@ int main(int argc, char* argv[])
         argPath = "./" / argPath; // In JS relative imports look like "./foo/bar" not "foo/bar", otherwise it refers to something in mode_modules
 
     if (fs::is_directory(argPath)) {
-        vector<string> sourceFiles;
+        vector<fs::path> sourceFiles;
         findSourceFiles(argPath.lexically_normal(), sourceFiles);
         for (auto filePath : sourceFiles)
-            modulesToAnalyze.push_back((Module*)&ModuleResolver::getModule(isolateWrapper, argPath, filePath, true));
+            modulesToAnalyze.push_back((Module*)&ModuleResolver::getModule(isolateWrapper, argPath, "."/fs::relative(filePath, argPath), true));
     } else if (argPath.filename() == "package.json") {
         ModuleResolver::getProjectMainFile(argPath.remove_filename());
         cout << "Resolving project imports..." << endl;
