@@ -121,7 +121,7 @@ static v8::Local<v8::Object> makeBabelObject(IsolateWrapper& isolateWrapper)
     }
 
     if (!cachedData) {
-        cachedData = ScriptCompiler::CreateCodeCache(unboundScript, babelSourceStr);
+        cachedData = ScriptCompiler::CreateCodeCache(unboundScript);
         ScriptCompiler::CachedData* expected = nullptr;
         if (babelCompileCache.compare_exchange_strong(expected, cachedData))
             writeBabelCompileCacheFile(cachedData);

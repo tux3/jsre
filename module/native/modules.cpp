@@ -79,7 +79,7 @@ void nativeModuleTrapFunction(const v8::FunctionCallbackInfo<v8::Value>& args)
 {
     using namespace v8;
     Local<String> functionNameLocal = args.Data().As<String>();
-    std::string functionName(*String::Utf8Value(functionNameLocal));
+    std::string functionName(*String::Utf8Value(args.GetIsolate(), functionNameLocal));
     throw std::runtime_error("A script tried to call an unauthorized Node.js function ("
         + functionName
         + ") at global scope.\n"

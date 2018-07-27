@@ -9,16 +9,16 @@ using namespace v8;
 void logFunction(const FunctionCallbackInfo<Value>& args)
 {
     Local<String> logTypeLocal = args.Data().As<String>();
-    std::string logType(*String::Utf8Value(logTypeLocal));
+    std::string logType(*String::Utf8Value(args.GetIsolate(), logTypeLocal));
     cout << "[console." << logType << "] ";
 
     for (int i = 0; i < args.Length(); ++i) {
         Local<Value> v = args[i];
         if (v->IsString()) {
-            String::Utf8Value str(v.As<String>());
+            String::Utf8Value str(args.GetIsolate(), v.As<String>());
             cout << *str;
         } else {
-            String::Utf8Value str(v->ToString());
+            String::Utf8Value str(args.GetIsolate(), v->ToString(args.GetIsolate()));
             cout << *str;
         }
         if (i == args.Length() - 1)

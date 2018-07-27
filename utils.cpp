@@ -94,7 +94,7 @@ void findSourceFiles(const fs::path& base, vector<fs::path>& results)
 void reportV8Exception(v8::Isolate* isolate, v8::TryCatch* try_catch)
 {
     v8::HandleScope handle_scope(isolate);
-    v8::String::Utf8Value exception(try_catch->Exception());
+    v8::String::Utf8Value exception(isolate, try_catch->Exception());
     const char* exception_string = *exception;
     v8::Local<v8::Message> message = try_catch->Message();
     if (message.IsEmpty()) {
@@ -103,14 +103,13 @@ void reportV8Exception(v8::Isolate* isolate, v8::TryCatch* try_catch)
         fprintf(stderr, "%s\n", exception_string);
     } else {
         // Print (filename):(line number): (message).
-        v8::String::Utf8Value filename(message->GetScriptOrigin().ResourceName());
+        v8::String::Utf8Value filename(isolate, message->GetScriptOrigin().ResourceName());
         v8::Local<v8::Context> context(isolate->GetCurrentContext());
         const char* filename_string = *filename;
         int linenum = message->GetLineNumber(context).FromJust();
         fprintf(stderr, "%s:%i: %s\n", filename_string, linenum, exception_string);
         // Print line of source code.
-        v8::String::Utf8Value sourceline(
-            message->GetSourceLine(context).ToLocalChecked());
+        v8::String::Utf8Value sourceline(isolate, message->GetSourceLine(context).ToLocalChecked());
         const char* sourceline_string = *sourceline;
         fprintf(stderr, "%s\n", sourceline_string);
         // Print wavy underline (GetUnderline is deprecated).
@@ -125,7 +124,7 @@ void reportV8Exception(v8::Isolate* isolate, v8::TryCatch* try_catch)
         fprintf(stderr, "\n");
         v8::Local<v8::Value> stack_trace_string;
         if (try_catch->StackTrace(context).ToLocal(&stack_trace_string) && stack_trace_string->IsString() && v8::Local<v8::String>::Cast(stack_trace_string)->Length() > 0) {
-            v8::String::Utf8Value stack_trace(stack_trace_string);
+            v8::String::Utf8Value stack_trace(isolate, stack_trace_string);
             const char* stack_trace_string = *stack_trace;
             fprintf(stderr, "%s\n", stack_trace_string);
         }
