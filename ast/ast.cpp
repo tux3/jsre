@@ -1,4 +1,6 @@
 #include "ast.hpp"
+#include "module/module.hpp"
+#include "utf8/utf8.h"
 #include <cassert>
 
 using namespace std;
@@ -16,20 +18,25 @@ AstNode* AstNode::getParent()
     return parent;
 }
 
-Module& AstNode::getParentModule()
+const AstNode *AstNode::getParent() const
 {
-    AstNode* node = this;
+    return parent;
+}
+
+Module& AstNode::getParentModule() const
+{
+    const AstNode* node = this;
     while (node->type != AstNodeType::Root)
         node = node->getParent();
-    auto root = reinterpret_cast<AstRoot*>(node);
+    auto root = reinterpret_cast<const AstRoot*>(node);
     return root->getParentModule();
 }
 
-AstNodeType AstNode::getType() {
+AstNodeType AstNode::getType() const {
     return type;
 }
 
-const char* AstNode::getTypeName() {
+const char* AstNode::getTypeName() const {
     if (type == AstNodeType::Root)
         return "Root";
     #define X(IMPORTED_NODE_TYPE) \
@@ -41,15 +48,28 @@ const char* AstNode::getTypeName() {
             throw new std::runtime_error("Unknown node type "+std::to_string((int)type));
 }
 
-AstSourceSpan AstNode::getLocation()
+AstSourceSpan AstNode::getLocation() const
 {
     return location;
 }
 
 void AstNode::setParentOfChildren() {
-    for (auto child : getChildren())
-        if (child)
-            child->parent = this;
+    applyChildren([this](AstNode* child) {
+        child->parent = this;
+        return true;
+    });
+}
+
+string AstNode::getSourceString()
+{
+    const string& source = getParentModule().getOriginalSource();
+
+    const char* beg_ptr = source.data();
+    utf8::advance(beg_ptr, location.start.offset, source.data()+source.size());
+    const char* end_ptr = beg_ptr;
+    utf8::advance(end_ptr, location.end.offset - location.start.offset, source.data()+source.size());
+
+    return string(beg_ptr, end_ptr - beg_ptr);
 }
 
 AstRoot::AstRoot(AstSourceSpan location, Module &parentModule, vector<AstNode*> body)
@@ -64,7 +84,7 @@ const std::vector<AstNode*>& AstRoot::getBody() {
     return body;
 }
 
-Module &AstRoot::getParentModule()
+Module &AstRoot::getParentModule() const
 {
     return parentModule;
 }
@@ -156,6 +176,16 @@ TemplateLiteral::TemplateLiteral(AstSourceSpan location, std::vector<AstNode*> q
     setParentOfChildren();
 }
 
+const std::vector<AstNode *> &TemplateLiteral::getQuasis()
+{
+    return quasis;
+}
+
+const std::vector<AstNode *> &TemplateLiteral::getExpressions()
+{
+    return expressions;
+}
+
 TemplateElement::TemplateElement(AstSourceSpan location, std::string rawValue, bool tail)
     : AstNode(location, AstNodeType::TemplateElement)
     , rawValue{ move(rawValue) }
@@ -177,19 +207,34 @@ TaggedTemplateExpression::TaggedTemplateExpression(AstSourceSpan location, AstNo
     setParentOfChildren();
 }
 
-ObjectProperty::ObjectProperty(AstSourceSpan location, AstNode* key, AstNode* value, bool isShorthand, bool isComputed)
+ObjectProperty::ObjectProperty(AstSourceSpan location, AstNode* key, AstNode* value, bool shorthand, bool computed)
     : AstNode(location, AstNodeType::ObjectProperty)
     , key{ key }
     , value{ value }
-    , isShorthand{ isShorthand }
-    , isComputed{ isComputed }
+    , shorthand{ shorthand }
+    , computed{ computed }
 {
     setParentOfChildren();
 }
 
-Identifier* ObjectProperty::getKey()
+AstNode *ObjectProperty::getKey()
 {
-    return reinterpret_cast<Identifier*>(key);
+    return key;
+}
+
+Identifier *ObjectProperty::getValue()
+{
+    return reinterpret_cast<Identifier*>(value);
+}
+
+bool ObjectProperty::isShorthand()
+{
+    return shorthand;
+}
+
+bool ObjectProperty::isComputed()
+{
+    return computed;
 }
 
 ObjectMethod::ObjectMethod(AstSourceSpan location, AstNode* id, vector<AstNode*> params, AstNode* body, TypeParameterDeclaration* typeParameters,
@@ -268,11 +313,21 @@ BreakStatement::BreakStatement(AstSourceSpan location, AstNode* label)
     setParentOfChildren();
 }
 
+AstNode *BreakStatement::getLabel()
+{
+    return label;
+}
+
 ContinueStatement::ContinueStatement(AstSourceSpan location, AstNode* label)
     : AstNode(location, AstNodeType::ContinueStatement)
     , label{ label }
 {
     setParentOfChildren();
+}
+
+AstNode *ContinueStatement::getLabel()
+{
+    return label;
 }
 
 IfStatement::IfStatement(AstSourceSpan location, AstNode* test, AstNode* consequent, AstNode* alternate)
@@ -299,12 +354,22 @@ AstNode *IfStatement::getAlternate()
     return alternate;
 }
 
-SwitchStatement::SwitchStatement(AstSourceSpan location, AstNode* discriminant, std::vector<AstNode*> cases)
+SwitchStatement::SwitchStatement(AstSourceSpan location, AstNode* discriminant, std::vector<SwitchCase*> cases)
     : AstNode(location, AstNodeType::SwitchStatement)
     , discriminant{ discriminant }
     , cases{ move(cases) }
 {
     setParentOfChildren();
+}
+
+AstNode *SwitchStatement::getDiscriminant()
+{
+    return discriminant;
+}
+
+const std::vector<SwitchCase*> &SwitchStatement::getCases()
+{
+    return cases;
 }
 
 SwitchCase::SwitchCase(AstSourceSpan location, AstNode* testOrDefault, std::vector<AstNode*> consequent)
@@ -315,7 +380,12 @@ SwitchCase::SwitchCase(AstSourceSpan location, AstNode* testOrDefault, std::vect
     setParentOfChildren();
 }
 
-const std::vector<AstNode *> &SwitchCase::getConsequent()
+AstNode *SwitchCase::getTest()
+{
+    return testOrDefault;
+}
+
+const std::vector<AstNode *> &SwitchCase::getConsequents()
 {
     return consequent;
 }
@@ -327,13 +397,33 @@ ThrowStatement::ThrowStatement(AstSourceSpan location, AstNode* argument)
     setParentOfChildren();
 }
 
-TryStatement::TryStatement(AstSourceSpan location, AstNode* body, AstNode* handler, AstNode* finalizer)
+AstNode *ThrowStatement::getArgument()
+{
+    return argument;
+}
+
+TryStatement::TryStatement(AstSourceSpan location, AstNode* block, AstNode* handler, AstNode* finalizer)
     : AstNode(location, AstNodeType::TryStatement)
-    , body{ body }
+    , block{ block }
     , handler{ handler }
     , finalizer{ finalizer }
 {
     setParentOfChildren();
+}
+
+AstNode *TryStatement::getBlock()
+{
+    return block;
+}
+
+CatchClause *TryStatement::getHandler()
+{
+    return reinterpret_cast<CatchClause*>(handler);
+}
+
+AstNode *TryStatement::getFinalizer()
+{
+    return finalizer;
 }
 
 CatchClause::CatchClause(AstSourceSpan location, AstNode* param, AstNode* body)
@@ -362,6 +452,11 @@ WhileStatement::WhileStatement(AstSourceSpan location, AstNode* test, AstNode* b
     setParentOfChildren();
 }
 
+AstNode *WhileStatement::getTest()
+{
+    return test;
+}
+
 AstNode *WhileStatement::getBody()
 {
     return body;
@@ -373,6 +468,11 @@ DoWhileStatement::DoWhileStatement(AstSourceSpan location, AstNode* test, AstNod
     , body{ body }
 {
     setParentOfChildren();
+}
+
+AstNode *DoWhileStatement::getTest()
+{
+    return test;
 }
 
 AstNode *DoWhileStatement::getBody()
@@ -393,6 +493,16 @@ ForStatement::ForStatement(AstSourceSpan location, AstNode* init, AstNode* test,
 VariableDeclaration* ForStatement::getInit()
 {
     return reinterpret_cast<VariableDeclaration*>(init);
+}
+
+AstNode *ForStatement::getTest()
+{
+    return test;
+}
+
+AstNode *ForStatement::getUpdate()
+{
+    return update;
 }
 
 AstNode *ForStatement::getBody()
@@ -494,9 +604,9 @@ AstNode *Function::getBody()
     return body;
 }
 
-const std::vector<Identifier*>& Function::getParams()
+const std::vector<AstNode*>& Function::getParams()
 {
-    return reinterpret_cast<vector<Identifier*>&>(params);
+    return params;
 }
 
 Super::Super(AstSourceSpan location)
@@ -545,6 +655,11 @@ AwaitExpression::AwaitExpression(AstSourceSpan location, AstNode* argument)
     setParentOfChildren();
 }
 
+AstNode *AwaitExpression::getArgument()
+{
+    return argument;
+}
+
 ArrayExpression::ArrayExpression(AstSourceSpan location, vector<AstNode*> elements)
     : AstNode(location, AstNodeType::ArrayExpression)
     , elements{ move(elements) }
@@ -552,11 +667,21 @@ ArrayExpression::ArrayExpression(AstSourceSpan location, vector<AstNode*> elemen
     setParentOfChildren();
 }
 
+const std::vector<AstNode *> &ArrayExpression::getElements()
+{
+    return elements;
+}
+
 ObjectExpression::ObjectExpression(AstSourceSpan location, vector<AstNode*> properties)
     : AstNode(location, AstNodeType::ObjectExpression)
     , properties{ move(properties) }
 {
     setParentOfChildren();
+}
+
+const std::vector<AstNode *> &ObjectExpression::getProperties()
+{
+    return properties;
 }
 
 FunctionExpression::FunctionExpression(AstSourceSpan location, AstNode* id, vector<AstNode*> params, AstNode* body,
@@ -585,13 +710,28 @@ UnaryExpression::Operator UnaryExpression::getOperator()
     return unaryOperator;
 }
 
-UpdateExpression::UpdateExpression(AstSourceSpan location, AstNode* argument, Operator updateOperator, bool isPrefix)
+UpdateExpression::UpdateExpression(AstSourceSpan location, AstNode* argument, Operator updateOperator, bool prefix)
     : AstNode(location, AstNodeType::UpdateExpression)
     , argument{ argument }
     , updateOperator{ updateOperator }
-    , isPrefix{ isPrefix }
+    , prefix{ prefix }
 {
     setParentOfChildren();
+}
+
+AstNode *UpdateExpression::getArgument()
+{
+    return argument;
+}
+
+UpdateExpression::Operator UpdateExpression::getOperator()
+{
+    return updateOperator;
+}
+
+bool UpdateExpression::isPrefix()
+{
+    return prefix;
 }
 
 BinaryExpression::BinaryExpression(AstSourceSpan location, AstNode* left, AstNode* right, Operator binaryOperator)
@@ -637,6 +777,11 @@ AstNode *AssignmentExpression::getRight()
     return right;
 }
 
+AssignmentExpression::Operator AssignmentExpression::getOperator()
+{
+    return assignmentOperator;
+}
+
 LogicalExpression::LogicalExpression(AstSourceSpan location, AstNode* left, AstNode* right, Operator logicalOperator)
     : AstNode(location, AstNodeType::LogicalExpression)
     , left{ left }
@@ -644,6 +789,21 @@ LogicalExpression::LogicalExpression(AstSourceSpan location, AstNode* left, AstN
     , logicalOperator{ logicalOperator }
 {
     setParentOfChildren();
+}
+
+AstNode *LogicalExpression::getLeft()
+{
+    return left;
+}
+
+AstNode *LogicalExpression::getRight()
+{
+    return right;
+}
+
+LogicalExpression::Operator LogicalExpression::getOperator()
+{
+    return logicalOperator;
 }
 
 MemberExpression::MemberExpression(AstSourceSpan location, AstNode* object, AstNode* property, bool computed)
@@ -685,6 +845,21 @@ ConditionalExpression::ConditionalExpression(AstSourceSpan location, AstNode* te
     , consequent{ consequent }
 {
     setParentOfChildren();
+}
+
+AstNode *ConditionalExpression::getTest()
+{
+    return test;
+}
+
+AstNode *ConditionalExpression::getAlternate()
+{
+    return alternate;
+}
+
+AstNode *ConditionalExpression::getConsequent()
+{
+    return consequent;
 }
 
 CallExpression::CallExpression(AstSourceSpan location, AstNode* callee, vector<AstNode*> arguments)
@@ -798,6 +973,11 @@ Identifier *ClassMethod::getKey()
     return reinterpret_cast<Identifier*>(key);
 }
 
+ClassMethod::Kind ClassMethod::getKind()
+{
+    return kind;
+}
+
 ClassPrivateMethod::ClassPrivateMethod(AstSourceSpan location, AstNode* id, std::vector<AstNode*> params, AstNode* body, AstNode* key,
                                        TypeParameterDeclaration* typeParameters, TypeAnnotation* returnType,
                                        ClassPrivateMethod::Kind kind, bool isGenerator, bool isAsync, bool isStatic)
@@ -812,6 +992,11 @@ ClassPrivateMethod::ClassPrivateMethod(AstSourceSpan location, AstNode* id, std:
 Identifier* ClassPrivateMethod::getKey()
 {
     return reinterpret_cast<Identifier*>(key);
+}
+
+ClassPrivateMethod::Kind ClassPrivateMethod::getKind()
+{
+    return kind;
 }
 
 ClassProperty::ClassProperty(AstSourceSpan location, AstNode* key, AstNode* value,
@@ -834,6 +1019,11 @@ Identifier* ClassProperty::getKey()
 AstNode *ClassProperty::getValue()
 {
     return value;
+}
+
+TypeAnnotation *ClassProperty::getTypeAnnotation()
+{
+    return typeAnnotation;
 }
 
 ClassPrivateProperty::ClassPrivateProperty(AstSourceSpan location, AstNode* key, AstNode* value,
@@ -897,9 +1087,9 @@ VariableDeclarator::VariableDeclarator(AstSourceSpan location, AstNode* id, AstN
     setParentOfChildren();
 }
 
-Identifier *VariableDeclarator::getId()
+AstNode *VariableDeclarator::getId()
 {
-    return reinterpret_cast<Identifier*>(id);
+    return id;
 }
 
 AstNode *VariableDeclarator::getInit()
@@ -914,6 +1104,11 @@ SpreadElement::SpreadElement(AstSourceSpan location, AstNode* argument)
     setParentOfChildren();
 }
 
+AstNode *SpreadElement::getArgument()
+{
+    return argument;
+}
+
 ObjectPattern::ObjectPattern(AstSourceSpan location, std::vector<AstNode*> properties, TypeAnnotation* typeAnnotation)
     : AstNode(location, AstNodeType::ObjectPattern)
     , properties{ move(properties) }
@@ -922,9 +1117,9 @@ ObjectPattern::ObjectPattern(AstSourceSpan location, std::vector<AstNode*> prope
     setParentOfChildren();
 }
 
-const std::vector<ObjectProperty *> &ObjectPattern::getProperties()
+const std::vector<AstNode *> &ObjectPattern::getProperties()
 {
-    return reinterpret_cast<vector<ObjectProperty*>&>(properties);
+    return properties;
 }
 
 ArrayPattern::ArrayPattern(AstSourceSpan location, std::vector<AstNode*> elements)
@@ -1070,6 +1265,11 @@ ExportNamedDeclaration::Kind ExportNamedDeclaration::getKind()
     return kind;
 }
 
+AstNode *ExportNamedDeclaration::getSource()
+{
+    return source;
+}
+
 ExportDefaultDeclaration::ExportDefaultDeclaration(AstSourceSpan location, AstNode* declaration)
     : AstNode(location, AstNodeType::ExportDefaultDeclaration)
     , declaration{ declaration }
@@ -1193,6 +1393,11 @@ NullableTypeAnnotation::NullableTypeAnnotation(AstSourceSpan location, AstNode* 
     setParentOfChildren();
 }
 
+AstNode *NullableTypeAnnotation::getTypeAnnotation()
+{
+    return typeAnnotation;
+}
+
 ArrayTypeAnnotation::ArrayTypeAnnotation(AstSourceSpan location, AstNode* elementType)
     : AstNode(location, AstNodeType::ArrayTypeAnnotation)
     , elementType{ elementType }
@@ -1267,6 +1472,21 @@ FunctionTypeAnnotation::FunctionTypeAnnotation(AstSourceSpan location, std::vect
     setParentOfChildren();
 }
 
+const std::vector<FunctionTypeParam *> &FunctionTypeAnnotation::getParams()
+{
+    return params;
+}
+
+FunctionTypeParam *FunctionTypeAnnotation::getRestParam()
+{
+    return rest;
+}
+
+AstNode *FunctionTypeAnnotation::getReturnType()
+{
+    return returnType;
+}
+
 FunctionTypeParam::FunctionTypeParam(AstSourceSpan location, Identifier* name, AstNode* typeAnnotation)
     : AstNode(location, AstNodeType::FunctionTypeParam)
     , name{ name }
@@ -1280,13 +1500,28 @@ Identifier *FunctionTypeParam::getName()
     return name;
 }
 
-ObjectTypeAnnotation::ObjectTypeAnnotation(AstSourceSpan location, std::vector<ObjectTypeProperty *> properties, std::vector<ObjectTypeIndexer *> indexers, bool exact)
+AstNode *FunctionTypeParam::getTypeAnnotation()
+{
+    return typeAnnotation;
+}
+
+ObjectTypeAnnotation::ObjectTypeAnnotation(AstSourceSpan location, std::vector<AstNode *> properties, std::vector<ObjectTypeIndexer *> indexers, bool exact)
     : AstNode(location, AstNodeType::ObjectTypeAnnotation)
     , properties{ move(properties) }
     , indexers{ move(indexers) }
     , exact{ exact }
 {
     setParentOfChildren();
+}
+
+const std::vector<AstNode *> &ObjectTypeAnnotation::getProperties()
+{
+    return properties;
+}
+
+bool ObjectTypeAnnotation::isExact()
+{
+    return exact;
 }
 
 ObjectTypeProperty::ObjectTypeProperty(AstSourceSpan location, Identifier *key, AstNode *value, bool optional)
@@ -1375,7 +1610,7 @@ TypeParameterInstantiation::TypeParameterInstantiation(AstSourceSpan location, s
     setParentOfChildren();
 }
 
-TypeParameterDeclaration::TypeParameterDeclaration(AstSourceSpan location, std::vector<AstNode *> params)
+TypeParameterDeclaration::TypeParameterDeclaration(AstSourceSpan location, std::vector<TypeParameter *> params)
     : AstNode(location, AstNodeType::TypeParameterDeclaration)
     , params{ move(params) }
 {
@@ -1384,7 +1619,7 @@ TypeParameterDeclaration::TypeParameterDeclaration(AstSourceSpan location, std::
 
 const std::vector<TypeParameter *> &TypeParameterDeclaration::getParams()
 {
-    return (const std::vector<TypeParameter *> &)params;
+    return params;
 }
 
 TypeParameter::TypeParameter(AstSourceSpan location, std::string name, AstNode *bound)
@@ -1406,6 +1641,16 @@ TypeCastExpression::TypeCastExpression(AstSourceSpan location, AstNode *expressi
     , typeAnnotation{ typeAnnotation }
 {
     setParentOfChildren();
+}
+
+AstNode *TypeCastExpression::getExpression()
+{
+    return expression;
+}
+
+TypeAnnotation *TypeCastExpression::getTypeAnnotation()
+{
+    return typeAnnotation;
 }
 
 ClassImplements::ClassImplements(AstSourceSpan location, Identifier *id, TypeParameterInstantiation* typeParameters)
@@ -1449,6 +1694,26 @@ InterfaceDeclaration::InterfaceDeclaration(AstSourceSpan location, Identifier *i
 Identifier *InterfaceDeclaration::getId()
 {
     return id;
+}
+
+TypeParameterDeclaration *InterfaceDeclaration::getTypeParameters()
+{
+    return typeParameters;
+}
+
+AstNode *InterfaceDeclaration::getBody()
+{
+    return body;
+}
+
+const std::vector<InterfaceExtends *> &InterfaceDeclaration::getExtends()
+{
+    return extends;
+}
+
+const std::vector<InterfaceExtends *> &InterfaceDeclaration::getMixins()
+{
+    return mixins;
 }
 
 InterfaceExtends::InterfaceExtends(AstSourceSpan location, Identifier *id, TypeParameterInstantiation* typeParameters)

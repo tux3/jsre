@@ -1,0 +1,22 @@
+#ifndef LIST_HPP_IN
+#define LIST_HPP_IN
+
+#include <vector>
+
+class Module;
+class Graph;
+
+// clang-format off
+#define FUNCTION_PASS_X_LIST \
+    @FUNCTION_PASSES@
+
+#define X(PASS) \
+    void PASS##FunctionPass(Module&, Graph&);
+FUNCTION_PASS_X_LIST
+#undef X
+// clang-format on
+
+using FunctionPass = void (*)(Module&, Graph&);
+extern std::vector<FunctionPass> functionPassList;
+
+#endif // LIST_HPP_IN

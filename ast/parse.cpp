@@ -77,7 +77,6 @@ static void worker_thread_loop()
     }
 
     workersStarted--;
-    condvar_mutex.unlock();
 }
 
 std::future<AstRoot*> parseSourceScriptAsync(Module &parentModule, const std::string& script)
@@ -163,10 +162,10 @@ static v8::Local<v8::Object> parseSourceScript(IsolateWrapper& isolateWrapper, v
     std::array arguments = { scriptSourceStr, transformOptions };
 
     Local<String> parseFunctionName = String::NewFromUtf8(isolate, "parse");
-    Local<Function> parseFunction = babelObject->Get(context, parseFunctionName).ToLocalChecked().As<Function>();
+    Local<v8::Function> parseFunction = babelObject->Get(context, parseFunctionName).ToLocalChecked().As<v8::Function>();
 
     Local<Value> result;
-    if (!parseFunction.As<Function>()->Call(context, context->Global(), arguments.size(), arguments.data()).ToLocal(&result)
+    if (!parseFunction.As<v8::Function>()->Call(context, context->Global(), arguments.size(), arguments.data()).ToLocal(&result)
         || !result->IsObject()) {
         reportV8Exception(isolate, &trycatch);
         throw std::runtime_error("parseSourceScript: Failed to parse script");
@@ -215,15 +214,19 @@ static void prepareOtherThreads()
 
     workersStopFlag.store(false, memory_order::memory_order_release);
 
-    auto count = workersCount();
-    for (decltype(count) i = 0; i<count-1; ++i)
-        workers.emplace_back(worker_thread_loop);
+    {
+        lock_guard condvar_lock(condvar_mutex);
+        auto count = workersCount();
+        for (decltype(count) i = 0; i<count-1; ++i)
+            workers.emplace_back(worker_thread_loop);
+    }
 
     worker_thread_loop();
 }
 
 void startParsingThreads()
 {
+    lock_guard condvar_lock(condvar_mutex); // Taken for concurrent push into workers vector
     workers.emplace_back(prepareOtherThreads);
 }
 

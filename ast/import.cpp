@@ -140,7 +140,7 @@ vector<T*> importChildArray(const Local<Object>& node, const char* name)
 
     vector<T*> result;
     result.reserve(len);
-    for (int i=0; i<len; ++i) {
+    for (uint16_t i=0; i<len; ++i) { // Note that we do have to import in the right order!
         auto elem = arr->Get(i).As<Object>();
         if (elem->IsNull()) {
             result.push_back(nullptr);
@@ -197,7 +197,7 @@ AstNode* importRegExpLiteral(const Local<Object>& node, AstSourceSpan& loc)
     return new RegExpLiteral(loc, getStr(node, "pattern"), getStr(node, "flags"));
 }
 
-AstNode* importNullLiteral(const Local<Object>& node, AstSourceSpan& loc)
+AstNode* importNullLiteral(const Local<Object>&, AstSourceSpan& loc)
 {
     return new NullLiteral(loc);
 }
@@ -232,7 +232,7 @@ AstNode* importExpressionStatement(const Local<Object>& node, AstSourceSpan& loc
     return new ExpressionStatement(loc, importChild(node, "expression"));
 }
 
-AstNode* importEmptyStatement(const Local<Object>& node, AstSourceSpan& loc)
+AstNode* importEmptyStatement(const Local<Object>&, AstSourceSpan& loc)
 {
     return new EmptyStatement(loc);
 }
@@ -242,7 +242,7 @@ AstNode* importWithStatement(const Local<Object>& node, AstSourceSpan& loc)
     return new WithStatement(loc, importChild(node, "object"), importChild(node, "body"));
 }
 
-AstNode* importDebuggerStatement(const Local<Object>& node, AstSourceSpan& loc)
+AstNode* importDebuggerStatement(const Local<Object>&, AstSourceSpan& loc)
 {
     return new DebuggerStatement(loc);
 }
@@ -278,7 +278,7 @@ AstNode* importIfStatement(const Local<Object>& node, AstSourceSpan& loc)
 
 AstNode* importSwitchStatement(const Local<Object>& node, AstSourceSpan& loc)
 {
-    return new SwitchStatement(loc, importChild(node, "discriminant"), importChildArray(node, "cases"));
+    return new SwitchStatement(loc, importChild(node, "discriminant"), importChildArray<SwitchCase>(node, "cases"));
 }
 
 AstNode* importSwitchCase(const Local<Object>& node, AstSourceSpan& loc)
@@ -837,7 +837,7 @@ AstNode* importGenericTypeAnnotation(const Local<Object>& node, AstSourceSpan& l
 
 AstNode* importObjectTypeAnnotation(const Local<Object>& node, AstSourceSpan& loc)
 {
-    vector<ObjectTypeProperty*> properties = importChildArray<ObjectTypeProperty>(node, "properties");
+    vector<AstNode*> properties = importChildArray(node, "properties");
     vector<ObjectTypeIndexer*> indexers = importChildArray<ObjectTypeIndexer>(node, "indexers");
     return new ObjectTypeAnnotation(loc, move(properties), move(indexers), getBool(node, "exact"));
 }
@@ -951,7 +951,7 @@ AstNode* importTypeParameterInstantiation(const Local<Object>& node, AstSourceSp
 
 AstNode* importTypeParameterDeclaration(const Local<Object>& node, AstSourceSpan& loc)
 {
-    return new TypeParameterDeclaration(loc, importChildArray(node, "params"));
+    return new TypeParameterDeclaration(loc, importChildArray<TypeParameter>(node, "params"));
 }
 
 AstNode* importTypeParameter(const Local<Object>& node, AstSourceSpan& loc)

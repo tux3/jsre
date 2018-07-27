@@ -4,8 +4,11 @@
 #include "ast/walk.hpp"
 #include "analyze/identresolution.hpp"
 #include "analyze/unused.hpp"
-#include "analyze/missingawait.hpp"
 #include "analyze/conditionals.hpp"
+#include "analyze/typecheck.hpp"
+#include "passes/function/list.hpp"
+#include "graph/graph.hpp"
+#include "graph/graphbuilder.hpp"
 #include "transform/flow.hpp"
 #include "global.hpp"
 #include "moduleresolver.hpp"
@@ -50,16 +53,17 @@ void Module::analyze()
     resolveLocalIdentifiers();
     resolveLocalXRefs();
     resolveImportedIdentifiers();
+    runTypechecks(*this);
+
+    for (const auto& funGraph : functionGraphs) {
+        if (!funGraph.second)
+            continue;
+        for (auto pass : functionPassList)
+            pass(*this, *funGraph.second);
+    }
 
     findUnusedLocalDeclarations(*this);
-    findMissingAwaits(*this);
     analyzeConditionals(*this);
-
-    // A good analysis strategy might be to start with the symbols we have in our local module,
-    // and move to imports whenever they are actually used by our local code.
-    //
-    // This means we'll know a real use/call site for almost every symbol we analyze,
-    // We'll also be able to mark any analyzed symbols, and whatever's left at the end is apparently unused (warn about it)
 }
 
 void Module::resolveLocalIdentifiers()
@@ -224,6 +228,32 @@ v8::Local<v8::Module> Module::getExecutableES6Module()
     return handleScope.Escape(compiledThunkModule.Get(isolate));
 }
 
+Graph *Module::getFunctionGraph(Function &fun)
+{
+    auto it = functionGraphs.find(&fun);
+    if (it != functionGraphs.end())
+        return it->second.get();
+
+    GraphBuilder builder(fun);
+    try {
+        const auto& result = functionGraphs.insert({&fun, builder.buildFromAst()});
+        return result.first->second.get();
+    } catch (const runtime_error& e) {
+        trace(fun, "Failed to build function graph: "s+e.what());
+        functionGraphs.insert({&fun, nullptr});
+        return nullptr;
+    }
+}
+
+shared_ptr<ClassTypeInfo> Module::getClassExtraTypeInfo(Class &c)
+{
+    auto it = classExtraTypeInfos.find(&c);
+    if (it != classExtraTypeInfos.end())
+        return it->second;
+
+    return classExtraTypeInfos[&c] = make_shared<ClassTypeInfo>(c);
+}
+
 int Module::getCompiledModuleIdentityHash()
 {
     return getCompiledModule()->GetIdentityHash();
@@ -239,13 +269,13 @@ string Module::getPath() const
     return path;
 }
 
-std::unordered_map<Identifier *, std::vector<Identifier *> > Module::getLocalXRefs()
+const std::unordered_map<Identifier *, std::vector<Identifier *> > &Module::getLocalXRefs()
 {
     resolveLocalXRefs();
     return localXRefs;
 }
 
-std::unordered_map<Identifier *, Identifier *> Module::getResolvedLocalIdentifiers()
+const std::unordered_map<Identifier *, Identifier *>& Module::getResolvedLocalIdentifiers()
 {
     resolveLocalIdentifiers();
     return resolvedLocalIdentifiers;

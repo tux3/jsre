@@ -13,6 +13,9 @@ using namespace std;
 struct Scope {
     unordered_map<string, Identifier*> declarations;
     bool isBlockScope;
+    // vars may shadow each other in the same scope, so we prefix them with their index to support multiple vars per scope
+    int writeCurrentVarDeclaration = 0;
+    int readCurrentVarDeclaration = 0;
 };
 
 static bool isFullScopeNodeType(AstNodeType type)
@@ -68,11 +71,14 @@ static void addDeclaration(vector<Scope>& scopes, Identifier& id)
     assert(id.getType() == AstNodeType::Identifier);
     if (isVarDeclarationIdentifier(id)) {
         size_t i = scopes.size() - 1;
+        // We insert in every relevant scope, to allow per-scope shadowing of vars (e.g. "if (x) {var i; foo(i);} var i; bar(i);")
         while (scopes[i].isBlockScope) {
             assert(i>0);
+            ++scopes[i].writeCurrentVarDeclaration;
+            auto prefixedName = to_string(scopes[i].writeCurrentVarDeclaration)+id.getName();
+            scopes[i].declarations.insert({prefixedName, &id});
             i -= 1;
         }
-        scopes[i].declarations.insert({id.getName(), &id});
     } else {
         scopes.back().declarations.insert({id.getName(), &id});
     }
@@ -108,8 +114,14 @@ static void findIdentifierOrFancyDeclarations(vector<Scope>& scopes, AstNode& id
             findIdentifierOrFancyDeclarations(scopes, *((VariableDeclarator*)declarator)->getId());
     } else if (type == AstNodeType::ObjectPattern) {
         auto& patternNode = (ObjectPattern&)id;
-        for (auto prop : patternNode.getProperties())
-            findIdentifierOrFancyDeclarations(scopes, *prop->getKey());
+        for (auto prop : patternNode.getProperties()) {
+            if (prop->getType() == AstNodeType::ObjectProperty)
+                findIdentifierOrFancyDeclarations(scopes, *((ObjectProperty*)prop)->getValue());
+            else if (prop->getType() == AstNodeType::RestElement)
+                findIdentifierOrFancyDeclarations(scopes, *((RestElement*)prop)->getArgument());
+            else
+                trace(id, "Unhandled type "s+prop->getTypeName()+" while resolving object pattern declarations");
+        }
     } else if (type == AstNodeType::ArrayPattern) {
         auto& patternNode = (ArrayPattern&)id;
         for (auto elem : patternNode.getElements())
@@ -147,7 +159,7 @@ static void findScopeDeclarations(vector<Scope>& scopes, AstNode& scopeNode)
     case AstNodeType::ClassPrivateMethod:
     {
         auto& fun = (Function&)scopeNode;
-        children = fun.getBody()->getChildren();
+        children = {fun.getBody()}; // We let the body be its own scope, so that locals can shadow arguments
         for (auto param : fun.getParams()) {
             // paran can also be an AssignmentPattern!
             findIdentifierOrFancyDeclarations(scopes, *param);
@@ -183,9 +195,7 @@ static void findScopeDeclarations(vector<Scope>& scopes, AstNode& scopeNode)
         children = scopeNode.getChildren();
     }
 
-    for (auto child : scopeNode.getChildren()) {
-        if (!child)
-            continue;
+    scopeNode.applyChildren([&](AstNode* child) {
         switch (child->getType()) {
         case AstNodeType::ClassDeclaration:
             addDeclaration(scopes, *((ClassDeclaration*)child)->getId());
@@ -217,7 +227,8 @@ static void findScopeDeclarations(vector<Scope>& scopes, AstNode& scopeNode)
             break;
         default: break;
         }
-    }
+        return true;
+    });
 }
 
 IdentifierResolutionResult resolveModuleIdentifiers(v8::Local<v8::Context> context, AstRoot& ast)
@@ -245,6 +256,17 @@ IdentifierResolutionResult resolveModuleIdentifiers(v8::Local<v8::Context> conte
             bool found = false;
             for (ssize_t i = scopeDeclarations.size()-1; i>=0; --i) {
                 const auto& scope = scopeDeclarations[i];
+                // Search for all possible shadowing var declarations first, then nornal let/const
+                for (int varIndex = scope.readCurrentVarDeclaration; varIndex>0; --varIndex) {
+                    auto prefixedName = to_string(varIndex)+name;
+                    if (auto it = scope.declarations.find(prefixedName); it != scope.declarations.end()) {
+                        identifierTargets.insert({&identifier, it->second});
+                        found = true;
+                        break;
+                    }
+                }
+                if (found)
+                    break;
                 if (auto it = scope.declarations.find(name); it != scope.declarations.end()) {
                     identifierTargets.insert({&identifier, it->second});
                     found = true;
@@ -261,9 +283,22 @@ IdentifierResolutionResult resolveModuleIdentifiers(v8::Local<v8::Context> conte
                 unresolvedTopLevelIdentifiers.insert({name, &identifier});
         }
 
-        for (auto child : node.getChildren())
-            if (child)
-                walkScopes(*child);
+        node.applyChildren([&](AstNode* child) {
+            walkScopes(*child);
+            return true;
+        });
+
+        // vars are allowed to shadow each other, so we have to keep track of the current number of vars we saw
+        if (node.getType() == AstNodeType::VariableDeclarator) {
+            auto parent = node.getParent();
+            if (parent->getType() == AstNodeType::VariableDeclaration) {
+                auto varNode = (VariableDeclaration*)parent;
+                if (varNode->getKind() == VariableDeclaration::Kind::Var) {
+                    for (size_t i = scopeDeclarations.size() - 1; scopeDeclarations[i].isBlockScope; --i)
+                        ++scopeDeclarations[i].readCurrentVarDeclaration;
+                }
+            }
+        }
 
         if (isFullScopeNode || isBlockScopeNode) {
             fullScopeLevel -= isFullScopeNode;
@@ -328,8 +363,21 @@ AstNode *resolveImportedIdentifierDeclaration(AstNode &importSpec)
     // TODO: Make some attempt at resolving exported identifiers of non-ES6 modules
 
     Module& sourceMod = importSpec.getParentModule();
-    auto importDeclNode = (ImportDeclaration*)importSpec.getParent();
-    const string& source = importDeclNode->getSource();
+    string source, importSpecName;
+
+    if (importSpec.getType() == AstNodeType::ExportSpecifier) {
+        auto exportDeclNode = (ExportNamedDeclaration*)importSpec.getParent();
+        auto sourceLiteral = (StringLiteral*)exportDeclNode->getSource();
+        assert(sourceLiteral);
+        source = sourceLiteral->getValue();
+        importSpecName = ((ExportSpecifier&)importSpec).getLocal()->getName();
+    } else {
+        assert(importSpec.getParent()->getType() == AstNodeType::ImportDeclaration);
+        auto importDeclNode = (ImportDeclaration*)importSpec.getParent();
+        source = importDeclNode->getSource();
+        if (importSpec.getType() == AstNodeType::ImportSpecifier)
+            importSpecName = ((ImportSpecifier&)importSpec).getImported()->getName();
+    }
 
     if (NativeModule::hasModule(source))
         return nullptr;
@@ -353,8 +401,7 @@ AstNode *resolveImportedIdentifierDeclaration(AstNode &importSpec)
             else
                 return WalkDecision::SkipOver;
         });
-    } else if (importSpec.getType() == AstNodeType::ImportSpecifier) {
-        const auto& importSpecName = ((ImportSpecifier&)importSpec).getImported()->getName();
+    } else if (importSpec.getType() == AstNodeType::ImportSpecifier || importSpec.getType() == AstNodeType::ExportSpecifier) {
         walkAst(importedMod.getAst(), [&](AstNode& node) {
             if (node.getType() == AstNodeType::ExportAllDeclaration) {
                 exported = &node;
@@ -380,7 +427,7 @@ AstNode *resolveImportedIdentifierDeclaration(AstNode &importSpec)
                     exported = &decl;
             } else if (node.getType() == AstNodeType::VariableDeclarator) {
                 auto& decl = (VariableDeclarator&)node;
-                if (decl.getId()->getName() == importSpecName)
+                if (decl.getId()->getType() == AstNodeType::Identifier && ((Identifier*)decl.getId())->getName() == importSpecName)
                     exported = &decl;
             }
         }, [&](AstNode& node) {
@@ -399,11 +446,11 @@ AstNode *resolveImportedIdentifierDeclaration(AstNode &importSpec)
                 return WalkDecision::SkipOver;
         });
     } else {
-        assert(false);
+        assert(false && "Unexpected import specifier type");
     }
 
     if (exported && exported->getType() == AstNodeType::Identifier) {
-        auto resolvedLocals = importedMod.getResolvedLocalIdentifiers();
+        const auto& resolvedLocals = importedMod.getResolvedLocalIdentifiers();
         const auto& resolvedIt = resolvedLocals.find((Identifier*)exported);
         if (resolvedIt != resolvedLocals.end())
             exported = resolvedIt->second;
@@ -420,20 +467,35 @@ AstNode *resolveIdentifierDeclaration(Identifier &identifier)
     if (it == resolvedIds.end())
         return nullptr;
 
-    AstNode* declId = it->second;
-    AstNode* decl = declId->getParent();
+    AstNode* decl = it->second->getParent();
     while (decl->getType() == AstNodeType::ImportDefaultSpecifier
-            || decl->getType() == AstNodeType::ImportSpecifier) {
+           || decl->getType() == AstNodeType::ImportSpecifier
+           || (decl->getType() == AstNodeType::ExportSpecifier
+               && ((ExportNamedDeclaration*)decl->getParent())->getSource())) {
         decl = resolveImportedIdentifierDeclaration(*decl);
         if (!decl)
             return nullptr;
+
+        // TODO: FIXME: This is a hack because sometimes when looking up a class we would get the identifier instead
+        if (decl->getType() == AstNodeType::Identifier)
+            decl = decl->getParent();
     }
 
     // We consider parameters of a function to be their own declaration, not the function!
+    // Furthermore, they may shadow the function name, so we need to check them by name
     if (isFunctionNode(*decl)) {
         Function* declFun = (Function*)decl;
-        if (declFun->getId() != declId)
-            return declId;
+        const auto& params = declFun->getParams();
+        for (const auto& param : params) {
+            if (param->getType() == AstNodeType::Identifier) {
+                if (((Identifier*)param)->getName() == identifier.getName())
+                    return param;
+            } else {
+                // TODO: FIXME: Handle more function parameter types than just this!
+                trace("Cannot handle non-identifier function parameters in resolveIdentifierDeclaration");
+                return nullptr;
+            }
+        }
     }
     return decl;
 }

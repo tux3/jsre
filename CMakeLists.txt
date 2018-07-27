@@ -20,6 +20,9 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
 ## Babel transpiler lib
 add_subdirectory(babel)
 
+## Function and module passes lib
+include(passes/CMakeLists.txt)
+
 ## Native modules
 enable_language(ASM_NASM)
 set(CMAKE_ASM_NASM_OBJECT_FORMAT elf64)
@@ -91,13 +94,13 @@ endfunction(add_headers_sources)
 
 list(APPEND SRCS main.cpp)
 add_headers_sources(
-    v8 isolatewrapper utils global reporting
+    v8 isolatewrapper utils global reporting hash
     module/basicmodule module/nativemodule module/module module/moduleresolver module/native/modules
     ast/ast ast/parse ast/import ast/location ast/walk
     graph/graph graph/graphbuilder graph/dot graph/type graph/basicblock
     transform/blank transform/flow
-    analyze/identresolution analyze/astqueries analyze/unused analyze/missingawait analyze/conditionals
-    queries/maybe queries/dataflow queries/types
+    analyze/identresolution analyze/astqueries analyze/unused analyze/conditionals analyze/typecheck
+    queries/maybe queries/dataflow queries/types queries/typeresolution
 )
 
 find_library(ICUUC_LIB NAMES icuuc)
@@ -107,6 +110,6 @@ set(V8_STATIC_LIBS "v8_base" "v8_external_snapshot" "v8_libplatform" "v8_libbase
 
 add_executable(${PROJECT_NAME} ${SRCS})
 target_include_directories(${PROJECT_NAME} PRIVATE ${V8_INCLUDE_DIR} ${PROJECT_SOURCE_DIR} ${PROJECT_BINARY_DIR}/generated)
-target_link_libraries(${PROJECT_NAME} PRIVATE pthread babel native_modules_js startup_snapshots -L${V8_STATIC_LIBS_DIR} ${V8_STATIC_LIBS} ${ICUUC_LIB} ${ICUI18N_LIB} "stdc++fs")
+target_link_libraries(${PROJECT_NAME} PRIVATE ${PROJECT_NAME}_passes pthread sodium babel native_modules_js startup_snapshots -L${V8_STATIC_LIBS_DIR} ${V8_STATIC_LIBS} ${ICUUC_LIB} ${ICUI18N_LIB} "stdc++fs")
 set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD 17
                                                  CXX_STANDARD_REQUIRED 1)

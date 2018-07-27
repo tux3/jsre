@@ -1,6 +1,7 @@
 #include "dot.hpp"
 #include "ast/ast.hpp"
 #include "graph/graph.hpp"
+#include <cstring>
 
 using namespace std;
 
@@ -23,6 +24,14 @@ template <>
 std::string valueStr<bool>(bool v)
 {
     return v ? " [true]" : " [false]";
+}
+
+template <>
+std::string valueStr<double>(double v)
+{
+    char buf[32];
+    snprintf(buf, sizeof(buf), " [%g]", v);
+    return buf;
 }
 
 template <>
@@ -72,6 +81,7 @@ std::string valueStr<BinaryExpression::Operator>(BinaryExpression::Operator v)
     case BinaryExpression::Operator::Instanceof:
         return "instanceof";
     }
+    throw runtime_error("Fell out of exhaustive switch for BinaryExpression::Operator");
 }
 
 template <>
@@ -93,6 +103,67 @@ std::string valueStr<UnaryExpression::Operator>(UnaryExpression::Operator v)
     case UnaryExpression::Operator::Delete:
         return "delete";
     }
+
+    throw runtime_error("Fell out of exhaustive switch for UnaryExpression::Operator");
+}
+
+template <>
+std::string valueStr<LogicalExpression::Operator>(LogicalExpression::Operator v)
+{
+    switch (v) {
+    case LogicalExpression::Operator::And:
+        return "&&";
+    case LogicalExpression::Operator::Or:
+        return "||";
+    }
+
+    throw runtime_error("Fell out of exhaustive switch for LogicalExpression::Operator");
+}
+
+template <>
+std::string valueStr<UpdateExpression::Operator>(UpdateExpression::Operator v)
+{
+    switch (v) {
+    case UpdateExpression::Operator::Increment:
+        return "++";
+    case UpdateExpression::Operator::Decrement:
+        return "--";
+    }
+
+    throw runtime_error("Fell out of exhaustive switch for UpdateExpression::Operator");
+}
+
+template <>
+std::string valueStr<AssignmentExpression::Operator>(AssignmentExpression::Operator v)
+{
+    switch (v) {
+    case AssignmentExpression::Operator::Equal:
+        return "=";
+    case AssignmentExpression::Operator::PlusEqual:
+        return "+=";
+    case AssignmentExpression::Operator::MinusEqual:
+        return "-=";
+    case AssignmentExpression::Operator::TimesEqual:
+        return "*=";
+    case AssignmentExpression::Operator::SlashEqual:
+        return "/=";
+    case AssignmentExpression::Operator::ModuloEqual:
+        return "%=";
+    case AssignmentExpression::Operator::LeftShiftEqual:
+        return "<<=";
+    case AssignmentExpression::Operator::SignRightShiftEqual:
+        return ">>=";
+    case AssignmentExpression::Operator::ZeroingRightShiftEqual:
+        return ">>>=";
+    case AssignmentExpression::Operator::OrEqual:
+        return "|=";
+    case AssignmentExpression::Operator::AndEqual:
+        return "&=";
+    case AssignmentExpression::Operator::XorEqual:
+        return "^=";
+    }
+
+    throw runtime_error("Fell out of exhaustive switch for LogicalExpression::Operator");
 }
 
 std::string makeLabel(const GraphNode& node)
@@ -117,10 +188,31 @@ std::string makeLabel(const GraphNode& node)
                || node.getType() == GraphNodeType::LoadNamedProperty
                || node.getType() == GraphNodeType::StoreNamedProperty) {
         base += " \\\""+((Identifier&)*node.getAstReference()).getName()+"\\\"";
+    } else if (node.getType() == GraphNodeType::ObjectProperty) {
+        if (node.inputCount() == 1) {
+            AstNode* key = ((ObjectProperty&)*node.getAstReference()).getKey();
+            if (key->getType() == AstNodeType::Identifier)
+                base += valueStr(((Identifier*)key)->getName());
+            else if (key->getType() == AstNodeType::StringLiteral)
+                base += valueStr(((StringLiteral*)key)->getValue());
+            else if (key->getType() == AstNodeType::NumericLiteral)
+                base += valueStr(((NumericLiteral*)key)->getValue());
+        }
+    } else if (node.getType() == GraphNodeType::Case) {
+        if (node.inputCount() == 0)
+            base += " [Default]";
     } else if (node.getType() == GraphNodeType::BinaryOperator) {
-        base += " "+valueStr(((BinaryExpression&)*node.getAstReference()).getOperator());
+        if (node.getAstReference()->getType() == AstNodeType::BinaryExpression)
+            base += " "+valueStr(((BinaryExpression&)*node.getAstReference()).getOperator());
+        else if (node.getAstReference()->getType() == AstNodeType::LogicalExpression)
+            base += " "+valueStr(((LogicalExpression&)*node.getAstReference()).getOperator());
+        else if (node.getAstReference()->getType() == AstNodeType::AssignmentExpression)
+            base += " "+valueStr(((AssignmentExpression&)*node.getAstReference()).getOperator());
     } else if (node.getType() == GraphNodeType::UnaryOperator) {
-        base += " "+valueStr(((UnaryExpression&)*node.getAstReference()).getOperator());
+        if (node.getAstReference()->getType() == AstNodeType::UnaryExpression)
+            base += " "+valueStr(((UnaryExpression&)*node.getAstReference()).getOperator());
+        else if (node.getAstReference()->getType() == AstNodeType::UpdateExpression)
+            base += " "+valueStr(((UpdateExpression&)*node.getAstReference()).getOperator());
     }
     return base;
 }
@@ -128,7 +220,7 @@ std::string makeLabel(const GraphNode& node)
 std::string makePrevLabel(GraphNodeType type, uint16_t j)
 {
     if (type == GraphNodeType::Merge) {
-        return "φ"+to_string(j);
+        return "phi"+to_string(j);
     }
 
     return {};
@@ -153,12 +245,29 @@ std::string makeInputLabel(GraphNodeType type, uint16_t j)
             return "obj";
         else if (j == 1)
             return "val";
+    } else if (type == GraphNodeType::ObjectProperty) {
+        if (j == 0)
+            return "val";
+        else if (j == 1)
+            return "key";
     } else if (type == GraphNodeType::LoadNamedProperty) {
         if (j == 0)
             return "obj";
+    } else if (type == GraphNodeType::BinaryOperator) {
+        if (j == 0)
+            return "lhs";
+        else if (j == 1)
+            return "rhs";
+    } else if (type == GraphNodeType::Call || type == GraphNodeType::NewCall) {
+        if (j == 0)
+            return "callee";
+        else
+            return "arg "+to_string(j);
     } else if (type == GraphNodeType::Phi) {
-        return "φ"+to_string(j);
-    }
+        return "phi"+to_string(j);
+    } else if (type == GraphNodeType::ArrayLiteral || type == GraphNodeType::ObjectLiteral) {
+        return to_string(j);
+   }
 
     return {};
 }

@@ -38,6 +38,7 @@ void defineMissingGlobalIdentifiers(v8::Local<v8::Context> context, const std::v
 
 /**
  * Finds the declaration of the identifier local to the imported module and imported by that specifier.
+ * Note that the import specifier may actually be an ExportSpecifier if the ExportNamedDeclaration has a source (importing-export)
  * This does not try to return an ExportSpecifier, but the declaration of the identifier under its original name.
  * Does not handle ImportNamespaceSpecifiers, since those arguably don't refer to a particular Ast node
  * If the imported module is re-exporting an imported identifier, we do not recursively resolve it, we return the local declaration.

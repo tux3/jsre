@@ -22,7 +22,7 @@ void setSuggest(bool enable)
     suggestEnabled = enable;
 }
 
-static void printLocation(AstNode& node)
+static void printLocation(const AstNode& node)
 {
     Module& mod = node.getParentModule();
     string relativePath = filesystem::relative(mod.getPath());
@@ -38,7 +38,7 @@ void trace(const string &msg)
     globalStats.traces++;
 }
 
-void trace(AstNode &node, const string &msg)
+void trace(const AstNode &node, const string &msg)
 {
     if (!debugEnabled)
         return;
@@ -54,7 +54,7 @@ void suggest(const string &msg)
     cout << "suggest: " << msg << endl;
 }
 
-void suggest(AstNode &node, const string &msg)
+void suggest(const AstNode &node, const string &msg)
 {
     if (suggestEnabled)
         printLocation(node);
@@ -67,7 +67,7 @@ void warn(const std::string &msg)
     cout << "warning: " << msg << endl;
 }
 
-void warn(AstNode &node, const string &msg)
+void warn(const AstNode &node, const string &msg)
 {
     printLocation(node);
     warn(msg);
@@ -79,7 +79,7 @@ void error(const string &msg)
     cout << "error: " << msg << endl;
 }
 
-void error(AstNode &node, const string &msg)
+void error(const AstNode &node, const string &msg)
 {
     printLocation(node);
     error(msg);
@@ -91,7 +91,7 @@ void fatal(const string &msg)
     abort();
 }
 
-void fatal(AstNode &node, const string &msg)
+void fatal(const AstNode &node, const string &msg)
 {
     printLocation(node);
     fatal(msg);

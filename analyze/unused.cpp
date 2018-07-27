@@ -50,7 +50,7 @@ static bool isIdentifierOfExportedDeclaration(Identifier& id)
 
 void findUnusedLocalDeclarations(Module &module)
 {
-    auto declarationsXRefs = module.getLocalXRefs();
+    const auto& declarationsXRefs = module.getLocalXRefs();
     for (const auto& elem : declarationsXRefs) {
         if (elem.second.size() > 1)
             continue;

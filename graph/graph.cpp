@@ -1,6 +1,7 @@
 #include "graph.hpp"
 #include <utility>
 #include <stdexcept>
+#include <cassert>
 
 const char* GraphNode::getTypeName() const {
     if (type == GraphNodeType::Invalid)
@@ -19,11 +20,17 @@ AstNode *GraphNode::getAstReference() const
     return astReference;
 }
 
-Graph::Graph()
+Graph::Graph(Function &fun)
+    : fun{fun}
 {
     nodes.emplace_back(GraphNodeType::Start);
     BasicBlock& block = blocks.emplace_back(*this, 0);
     block.seal();
+}
+
+Function &Graph::getFun() const
+{
+    return fun;
 }
 
 uint16_t Graph::size() const
@@ -50,6 +57,8 @@ uint16_t Graph::addNode(GraphNode &&node)
 
 uint16_t Graph::addNode(GraphNode &&node, uint16_t prev)
 {
+    assert(prev != 0 || !nodes[0].nextCount());
+
     uint16_t newIndex = (uint16_t)nodes.size();
     node.addPrev(prev);
     nodes.emplace_back(std::move(node));
@@ -57,7 +66,7 @@ uint16_t Graph::addNode(GraphNode &&node, uint16_t prev)
     return newIndex;
 }
 
-uint16_t Graph::addNode(GraphNode &&node, std::vector<uint16_t>& prevs)
+uint16_t Graph::addNode(GraphNode &&node, const std::vector<uint16_t>& prevs)
 {
     uint16_t newIndex = (uint16_t)nodes.size();
     for (const auto& prev : prevs) {
@@ -117,12 +126,12 @@ size_t GraphNode::inputCount() const
 
 size_t GraphNode::prevCount() const
 {
-    return prev.size();
+    return prevs.size();
 }
 
 size_t GraphNode::nextCount() const
 {
-    return next.size();
+    return nexts.size();
 }
 
 uint16_t GraphNode::getInput(uint16_t n) const
@@ -132,12 +141,12 @@ uint16_t GraphNode::getInput(uint16_t n) const
 
 uint16_t GraphNode::getPrev(uint16_t n) const
 {
-    return prev[n];
+    return prevs[n];
 }
 
 uint16_t GraphNode::getNext(uint16_t n) const
 {
-    return next[n];
+    return nexts[n];
 }
 
 void GraphNode::addInput(uint16_t n)
@@ -147,20 +156,31 @@ void GraphNode::addInput(uint16_t n)
 
 void GraphNode::addPrev(uint16_t n)
 {
-    prev.push_back(n);
+    prevs.push_back(n);
 }
 
 void GraphNode::addNext(uint16_t n)
 {
-    next.push_back(n);
+    nexts.push_back(n);
 }
 
 void GraphNode::setPrev(uint16_t idx, uint16_t newValue)
 {
-    prev[idx] = newValue;
+    prevs[idx] = newValue;
 }
 
 void GraphNode::setNext(uint16_t idx, uint16_t newValue)
 {
-    next[idx] = newValue;
+    nexts[idx] = newValue;
+}
+
+void GraphNode::replacePrev(uint16_t oldValue, uint16_t newValue)
+{
+    for (uint16_t& prev : prevs) {
+        if (prev == oldValue) {
+            prev = newValue;
+            return;
+        }
+    }
+    assert(false && "Prev not found!");
 }

@@ -17,403 +17,670 @@ void walkAst(AstNode& node, AstNodeCallback cb, std::function<WalkDecision(AstNo
             walkAst(*child, cb, predicate);
 }
 
-vector<AstNode*> AstNode::getChildren() {
-    return {};
+template <class T>
+static bool applyNode(const std::function<bool (AstNode *)> &cb, T* node)
+{
+    if (!node)
+        return true;
+    return cb(node);
 }
 
-vector<AstNode*> AstRoot::getChildren() {
-    return body;
+template <class T>
+static bool applyArray(const std::function<bool (AstNode *)> &cb, const std::vector<T*>& nodes)
+{
+    for (AstNode* child : nodes) {
+        if (!child)
+            continue;
+        if (!cb(child))
+            return false;
+    }
+    return true;
 }
 
-vector<AstNode*> Identifier::getChildren() {
-    return {typeAnnotation};
+std::vector<AstNode*> AstNode::getChildren()
+{
+    vector<AstNode*> result;
+    applyChildren([&](AstNode* child) {
+        result.push_back(child);
+        return true;
+    });
+    return result;
 }
 
-vector<AstNode*> TemplateLiteral::getChildren() {
-    return concat(quasis, expressions);
+void AstNode::applyChildren(const std::function<bool (AstNode *)> &)
+{
 }
 
-vector<AstNode*> TaggedTemplateExpression::getChildren() {
-    return {tag, quasi};
+void AstRoot::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    applyArray(cb, body);
 }
 
-vector<AstNode*> Function::getChildren() {
-    auto children = concat({id}, params);
-    children.push_back(body);
-    children.push_back(typeParameters);
-    children.push_back(returnType);
-    return children;
+void Identifier::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    applyNode(cb, typeAnnotation);
 }
 
-vector<AstNode*> ObjectProperty::getChildren() {
-    return {key, value};
+void TemplateLiteral::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyArray(cb, quasis))
+        return;
+    if (!applyArray(cb, expressions))
+        return;
 }
 
-vector<AstNode*> ObjectMethod::getChildren() {
-    return concat({key}, Function::getChildren());
+void TaggedTemplateExpression::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyNode(cb, tag))
+        return;
+    if (!applyNode(cb, quasi))
+        return;
 }
 
-vector<AstNode*> ExpressionStatement::getChildren() {
-    return {expression};
+void Function::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyNode(cb, id))
+        return;
+    if (!applyArray(cb, params))
+        return;
+    if (!applyNode(cb, body))
+        return;
+    if (!applyNode(cb, typeParameters))
+        return;
+    if (!applyNode(cb, returnType))
+        return;
 }
 
-vector<AstNode*> BlockStatement::getChildren() {
-    return {body};
+void ObjectProperty::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyNode(cb, key))
+        return;
+    if (!applyNode(cb, value))
+        return;
 }
 
-vector<AstNode*> WithStatement::getChildren() {
-    return {object, body};
+void ObjectMethod::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyNode(cb, key))
+        return;
+    Function::applyChildren(cb);
 }
 
-vector<AstNode*> ReturnStatement::getChildren() {
-    return {argument};
+void ExpressionStatement::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyNode(cb, expression))
+        return;
 }
 
-vector<AstNode*> LabeledStatement::getChildren() {
-    return {label, body};
+void BlockStatement::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyArray(cb, body))
+        return;
 }
 
-vector<AstNode*> BreakStatement::getChildren() {
-    return {label};
+void WithStatement::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyNode(cb, object))
+        return;
+    if (!applyNode(cb, body))
+        return;
 }
 
-vector<AstNode*> ContinueStatement::getChildren() {
-    return {label};
+void ReturnStatement::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyNode(cb, argument))
+        return;
 }
 
-vector<AstNode*> IfStatement::getChildren() {
-    return {test, consequent, alternate};
+void LabeledStatement::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyNode(cb, label))
+        return;
+    if (!applyNode(cb, body))
+        return;
 }
 
-vector<AstNode*> SwitchStatement::getChildren() {
-    return concat({discriminant}, cases);
+void BreakStatement::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    applyNode(cb, label);
 }
 
-vector<AstNode*> SwitchCase::getChildren() {
-    return concat({testOrDefault}, consequent);
+void ContinueStatement::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    applyNode(cb, label);
 }
 
-vector<AstNode*> ThrowStatement::getChildren() {
-    return {argument};
+void IfStatement::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyNode(cb, test))
+        return;
+    if (!applyNode(cb, consequent))
+        return;
+    if (!applyNode(cb, alternate))
+        return;
 }
 
-vector<AstNode*> TryStatement::getChildren() {
-    return {body, handler, finalizer};
+void SwitchStatement::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyNode(cb, discriminant))
+        return;
+    if (!applyArray(cb, cases))
+        return;
 }
 
-vector<AstNode*> CatchClause::getChildren() {
-    return {param, body};
+void SwitchCase::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyNode(cb, testOrDefault))
+        return;
+    if (!applyArray(cb, consequent))
+        return;
 }
 
-vector<AstNode*> WhileStatement::getChildren() {
-    return {test, body};
+void ThrowStatement::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyNode(cb, argument))
+        return;
 }
 
-vector<AstNode*> DoWhileStatement::getChildren() {
-    return {test, body};
+void TryStatement::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyNode(cb, block))
+        return;
+    if (!applyNode(cb, handler))
+        return;
+    if (!applyNode(cb, finalizer))
+        return;
 }
 
-vector<AstNode*> ForStatement::getChildren() {
-    return {init, test, update, body};
+void CatchClause::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyNode(cb, param))
+        return;
+    if (!applyNode(cb, body))
+        return;
 }
 
-vector<AstNode*> ForInStatement::getChildren() {
-    return {left, right, body};
+void WhileStatement::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyNode(cb, test))
+        return;
+    if (!applyNode(cb, body))
+        return;
 }
 
-vector<AstNode*> ForOfStatement::getChildren() {
-    return {left, right, body};
+void DoWhileStatement::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyNode(cb, test))
+        return;
+    if (!applyNode(cb, body))
+        return;
 }
 
-vector<AstNode*> YieldExpression::getChildren() {
-    return {argument};
+void ForStatement::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyNode(cb, init))
+        return;
+    if (!applyNode(cb, test))
+        return;
+    if (!applyNode(cb, update))
+        return;
+    if (!applyNode(cb, body))
+        return;
 }
 
-vector<AstNode*> AwaitExpression::getChildren() {
-    return {argument};
+void ForInStatement::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyNode(cb, left))
+        return;
+    if (!applyNode(cb, right))
+        return;
+    if (!applyNode(cb, body))
+        return;
 }
 
-vector<AstNode*> ArrayExpression::getChildren() {
-    return elements;
+void ForOfStatement::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyNode(cb, left))
+        return;
+    if (!applyNode(cb, right))
+        return;
+    if (!applyNode(cb, body))
+        return;
 }
 
-vector<AstNode*> ObjectExpression::getChildren() {
-    return properties;
+void YieldExpression::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyNode(cb, argument))
+        return;
 }
 
-vector<AstNode*> UnaryExpression::getChildren() {
-    return {argument};
+void AwaitExpression::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyNode(cb, argument))
+        return;
 }
 
-vector<AstNode*> UpdateExpression::getChildren() {
-    return {argument};
+void ArrayExpression::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyArray(cb, elements))
+        return;
 }
 
-vector<AstNode*> BinaryExpression::getChildren() {
-    return {left, right};
+void ObjectExpression::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyArray(cb, properties))
+        return;
 }
 
-vector<AstNode*> AssignmentExpression::getChildren() {
-    return {left, right};
+void UnaryExpression::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyNode(cb, argument))
+        return;
 }
 
-vector<AstNode*> LogicalExpression::getChildren() {
-    return {left, right};
+void UpdateExpression::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyNode(cb, argument))
+        return;
 }
 
-vector<AstNode*> MemberExpression::getChildren() {
-    return {object, property};
+void BinaryExpression::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyNode(cb, left))
+        return;
+    if (!applyNode(cb, right))
+        return;
 }
 
-vector<AstNode*> BindExpression::getChildren() {
-    return {object, callee};
+void AssignmentExpression::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyNode(cb, left))
+        return;
+    if (!applyNode(cb, right))
+        return;
 }
 
-vector<AstNode*> ConditionalExpression::getChildren() {
-    return {test, alternate, consequent};
+void LogicalExpression::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyNode(cb, left))
+        return;
+    if (!applyNode(cb, right))
+        return;
 }
 
-vector<AstNode*> CallExpression::getChildren() {
-    return concat({callee}, arguments);
+void MemberExpression::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyNode(cb, object))
+        return;
+    if (!applyNode(cb, property))
+        return;
 }
 
-vector<AstNode*> SequenceExpression::getChildren() {
-    return expressions;
+void BindExpression::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyNode(cb, object))
+        return;
+    if (!applyNode(cb, callee))
+        return;
 }
 
-vector<AstNode*> DoExpression::getChildren() {
-    return {body};
+void ConditionalExpression::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyNode(cb, test))
+        return;
+    if (!applyNode(cb, alternate))
+        return;
+    if (!applyNode(cb, consequent))
+        return;
 }
 
-vector<AstNode*> Class::getChildren() {
-    return concat((vector<AstNode*>&)implements, {id, superClass, body, typeParameters, superTypeParameters});
+void CallExpression::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyNode(cb, callee))
+        return;
+    if (!applyArray(cb, arguments))
+        return;
 }
 
-vector<AstNode*> ClassBody::getChildren() {
-    return body;
+void SequenceExpression::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyArray(cb, expressions))
+        return;
 }
 
-vector<AstNode*> ClassProperty::getChildren() {
-    return {key, value, typeAnnotation};
+void DoExpression::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyNode(cb, body))
+        return;
 }
 
-vector<AstNode*> ClassPrivateProperty::getChildren() {
-    return {key, value, typeAnnotation};
+void Class::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyArray(cb, implements))
+        return;
+    if (!applyNode(cb, id))
+        return;
+    if (!applyNode(cb, superClass))
+        return;
+    if (!applyNode(cb, body))
+        return;
+    if (!applyNode(cb, typeParameters))
+        return;
+    if (!applyNode(cb, superTypeParameters))
+        return;
 }
 
-vector<AstNode*> ClassMethod::getChildren() {
-    return concat({key, returnType}, Function::getChildren());
+void ClassBody::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyArray(cb, body))
+        return;
 }
 
-vector<AstNode*> ClassPrivateMethod::getChildren() {
-    return concat({key}, Function::getChildren());
+void ClassProperty::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyNode(cb, key))
+        return;
+    if (!applyNode(cb, value))
+        return;
+    if (!applyNode(cb, typeAnnotation))
+        return;
 }
 
-vector<AstNode*> VariableDeclaration::getChildren() {
-    return (vector<AstNode*>&)declarators;
+void ClassPrivateProperty::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyNode(cb, key))
+        return;
+    if (!applyNode(cb, value))
+        return;
+    if (!applyNode(cb, typeAnnotation))
+        return;
 }
 
-vector<AstNode*> VariableDeclarator::getChildren() {
-    return {id, init};
+void ClassMethod::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyNode(cb, key))
+        return;
+    if (!applyNode(cb, returnType))
+        return;
+    Function::applyChildren(cb);
 }
 
-vector<AstNode*> SpreadElement::getChildren() {
-    return {argument};
+void ClassPrivateMethod::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyNode(cb, key))
+        return;
+    if (!applyNode(cb, returnType))
+        return;
+    Function::applyChildren(cb);
 }
 
-vector<AstNode*> ObjectPattern::getChildren() {
-    return concat(properties, {typeAnnotation});
+void VariableDeclaration::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    applyArray(cb, declarators);
 }
 
-vector<AstNode*> ArrayPattern::getChildren() {
-    return elements;
+void VariableDeclarator::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyNode(cb, id))
+        return;
+    if (!applyNode(cb, init))
+        return;
 }
 
-vector<AstNode*> AssignmentPattern::getChildren() {
-    return {left, right};
+void SpreadElement::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyNode(cb, argument))
+        return;
 }
 
-vector<AstNode*> RestElement::getChildren() {
-    return {argument, typeAnnotation};
+void ObjectPattern::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyArray(cb, properties))
+        return;
+    if (!applyNode(cb, typeAnnotation))
+        return;
 }
 
-vector<AstNode*> MetaProperty::getChildren() {
-    return {meta, property};
+void ArrayPattern::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyArray(cb, elements))
+        return;
 }
 
-vector<AstNode*> ImportDeclaration::getChildren() {
-    return concat(specifiers, {source});
+void AssignmentPattern::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyNode(cb, left))
+        return;
+    if (!applyNode(cb, right))
+        return;
 }
 
-vector<AstNode*> ImportSpecifier::getChildren() {
+void RestElement::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyNode(cb, argument))
+        return;
+    if (!applyNode(cb, typeAnnotation))
+        return;
+}
+
+void MetaProperty::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyNode(cb, meta))
+        return;
+    if (!applyNode(cb, property))
+        return;
+}
+
+void ImportDeclaration::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyArray(cb, specifiers))
+        return;
+    if (!applyNode(cb, source))
+        return;
+}
+
+void ImportSpecifier::applyChildren(const std::function<bool (AstNode*)>& cb) {
     // We don't want to walk through two identifiers when there's only one written down in the source code
     // Having the imported available on demand is nice for consistency, but not when walking the AST
+    if (!applyNode(cb, local))
+        return;
     if (localEqualsImported)
-        return {local};
-    else
-        return {local, imported};
+        return;
+    applyNode(cb, imported);
 }
 
-vector<AstNode*> ImportDefaultSpecifier::getChildren() {
-    return {local};
+void ImportDefaultSpecifier::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyNode(cb, local))
+        return;
 }
 
-vector<AstNode*> ImportNamespaceSpecifier::getChildren() {
-    return {local};
+void ImportNamespaceSpecifier::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyNode(cb, local))
+        return;
 }
 
-vector<AstNode*> ExportNamedDeclaration::getChildren() {
-    return concat({declaration, source}, specifiers);
+void ExportNamedDeclaration::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyNode(cb, declaration))
+        return;
+    if (!applyNode(cb, source))
+        return;
+    if (!applyArray(cb, specifiers))
+        return;
 }
 
-vector<AstNode*> ExportDefaultDeclaration::getChildren() {
-    return {declaration};
+void ExportDefaultDeclaration::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyNode(cb, declaration))
+        return;
 }
 
-vector<AstNode*> ExportAllDeclaration::getChildren() {
-    return {source};
+void ExportAllDeclaration::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyNode(cb, source))
+        return;
 }
 
-vector<AstNode*> ExportSpecifier::getChildren() {
-    return {local, exported};
+void ExportSpecifier::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyNode(cb, local))
+        return;
+    if (!applyNode(cb, exported))
+        return;
 }
 
-vector<AstNode*> ExportDefaultSpecifier::getChildren() {
-    return {exported};
+void ExportDefaultSpecifier::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyNode(cb, exported))
+        return;
 }
 
-vector<AstNode*> TypeAnnotation::getChildren() {
-    return {typeAnnotation};
+void TypeAnnotation::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyNode(cb, typeAnnotation))
+        return;
 }
 
-vector<AstNode*> GenericTypeAnnotation::getChildren() {
-    return {id, typeParameters};
+void GenericTypeAnnotation::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyNode(cb, id))
+        return;
+    if (!applyNode(cb, typeParameters))
+        return;
 }
 
-vector<AstNode*> FunctionTypeAnnotation::getChildren() {
-    return concat((vector<AstNode*>&)params, {(AstNode*)rest, returnType});
+void FunctionTypeAnnotation::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyArray(cb, params))
+        return;
+    if (!applyNode(cb, rest))
+        return;
+    if (!applyNode(cb, returnType))
+        return;
 }
 
-vector<AstNode*> FunctionTypeParam::getChildren() {
-    return {name, typeAnnotation};
+void FunctionTypeParam::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyNode(cb, name))
+        return;
+    if (!applyNode(cb, typeAnnotation))
+        return;
 }
 
-vector<AstNode*> ObjectTypeAnnotation::getChildren() {
-    return concat((vector<AstNode*>&)properties, (vector<AstNode*>&)indexers);
+void ObjectTypeAnnotation::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyArray(cb, properties))
+        return;
+    if (!applyArray(cb, indexers))
+        return;
 }
 
-vector<AstNode*> ObjectTypeProperty::getChildren() {
-    return {key, value};
+void ObjectTypeProperty::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyNode(cb, key))
+        return;
+    if (!applyNode(cb, value))
+        return;
 }
 
-vector<AstNode*> ObjectTypeSpreadProperty::getChildren() {
-    return {argument};
+void ObjectTypeSpreadProperty::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyNode(cb, argument))
+        return;
 }
 
-vector<AstNode*> ObjectTypeIndexer::getChildren() {
-    return {id, key, value};
+void ObjectTypeIndexer::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyNode(cb, id))
+        return;
+    if (!applyNode(cb, key))
+        return;
+    if (!applyNode(cb, value))
+        return;
 }
 
-vector<AstNode*> TypeAlias::getChildren() {
-    return {id, typeParameters, right};
+void TypeAlias::applyChildren(const std::function<bool (AstNode*)>& cb) {
+    if (!applyNode(cb, id))
+        return;
+    if (!applyNode(cb, typeParameters))
+        return;
+    if (!applyNode(cb, right))
+        return;
 }
 
-vector<AstNode*> TypeParameterInstantiation::getChildren()
+void TypeParameterInstantiation::applyChildren(const std::function<bool (AstNode*)>& cb)
 {
-    return params;
+    if (!applyArray(cb, params))
+        return;
 }
 
-vector<AstNode*> TypeParameterDeclaration::getChildren()
+void TypeParameterDeclaration::applyChildren(const std::function<bool (AstNode*)>& cb)
 {
-    return params;
+    if (!applyArray(cb, params))
+        return;
 }
 
-vector<AstNode*> TypeCastExpression::getChildren()
+void TypeCastExpression::applyChildren(const std::function<bool (AstNode*)>& cb)
 {
-    return {expression, typeAnnotation};
+    if (!applyNode(cb, expression))
+        return;
+    if (!applyNode(cb, typeAnnotation))
+        return;
 }
 
-vector<AstNode*> NullableTypeAnnotation::getChildren()
+void NullableTypeAnnotation::applyChildren(const std::function<bool (AstNode*)>& cb)
 {
-    return {typeAnnotation};
+    if (!applyNode(cb, typeAnnotation))
+        return;
 }
 
-vector<AstNode*> ArrayTypeAnnotation::getChildren()
+void ArrayTypeAnnotation::applyChildren(const std::function<bool (AstNode*)>& cb)
 {
-    return {elementType};
+    if (!applyNode(cb, elementType))
+        return;
 }
 
-vector<AstNode*> TupleTypeAnnotation::getChildren()
+void TupleTypeAnnotation::applyChildren(const std::function<bool (AstNode*)>& cb)
 {
-    return types;
+    if (!applyArray(cb, types))
+        return;
 }
 
-vector<AstNode*> UnionTypeAnnotation::getChildren()
+void UnionTypeAnnotation::applyChildren(const std::function<bool (AstNode*)>& cb)
 {
-    return types;
+    if (!applyArray(cb, types))
+        return;
 }
 
-vector<AstNode*> ClassImplements::getChildren()
+void ClassImplements::applyChildren(const std::function<bool (AstNode*)>& cb)
 {
-    return {id, typeParameters};
+    if (!applyNode(cb, id))
+        return;
+    if (!applyNode(cb, typeParameters))
+        return;
 }
 
-vector<AstNode*> QualifiedTypeIdentifier::getChildren()
+void QualifiedTypeIdentifier::applyChildren(const std::function<bool (AstNode*)>& cb)
 {
-    return {qualification, id};
+    if (!applyNode(cb, qualification))
+        return;
+    if (!applyNode(cb, id))
+        return;
 }
 
-vector<AstNode*> TypeofTypeAnnotation::getChildren()
+void TypeofTypeAnnotation::applyChildren(const std::function<bool (AstNode*)>& cb)
 {
-    return {argument};
+    if (!applyNode(cb, argument))
+        return;
 }
 
-vector<AstNode*> InterfaceDeclaration::getChildren()
+void InterfaceDeclaration::applyChildren(const std::function<bool (AstNode*)>& cb)
 {
-    return concat(concat({id, (AstNode*)typeParameters, body},
-                         (vector<AstNode*>&)extends),
-                  (vector<AstNode*>&)mixins);
+    if (!applyNode(cb, id))
+        return;
+    if (!applyNode(cb, typeParameters))
+        return;
+    if (!applyNode(cb, body))
+        return;
+    if (!applyArray(cb, extends))
+        return;
+    if (!applyArray(cb, mixins))
+        return;
 }
 
-vector<AstNode*> InterfaceExtends::getChildren()
+void InterfaceExtends::applyChildren(const std::function<bool (AstNode*)>& cb)
 {
-    return {id, typeParameters};
+    if (!applyNode(cb, id))
+        return;
+    if (!applyNode(cb, typeParameters))
+        return;
 }
 
-vector<AstNode*> TypeParameter::getChildren()
+void TypeParameter::applyChildren(const std::function<bool (AstNode*)>& cb)
 {
-    return {name, bound};
+    if (!applyNode(cb, name))
+        return;
+    if (!applyNode(cb, bound))
+        return;
 }
 
-std::vector<AstNode *> DeclareVariable::getChildren()
+void DeclareVariable::applyChildren(const std::function<bool (AstNode*)>& cb)
 {
-    return {id};
+    if (!applyNode(cb, id))
+        return;
 }
 
-std::vector<AstNode *> DeclareFunction::getChildren()
+void DeclareFunction::applyChildren(const std::function<bool (AstNode*)>& cb)
 {
-    return {id};
+    if (!applyNode(cb, id))
+        return;
 }
 
-std::vector<AstNode *> DeclareTypeAlias::getChildren()
+void DeclareTypeAlias::applyChildren(const std::function<bool (AstNode*)>& cb)
 {
-    return {id, right};
+    if (!applyNode(cb, id))
+        return;
+    if (!applyNode(cb, right))
+        return;
 }
 
-vector<AstNode*> DeclareClass::getChildren()
+void DeclareClass::applyChildren(const std::function<bool (AstNode*)>& cb)
 {
-    return concat(concat({id, (AstNode*)typeParameters, body},
-                         (vector<AstNode*>&)extends),
-                  (vector<AstNode*>&)mixins);
+    if (!applyNode(cb, id))
+        return;
+    if (!applyNode(cb, typeParameters))
+        return;
+    if (!applyNode(cb, body))
+        return;
+    if (!applyArray(cb, extends))
+        return;
+    if (!applyArray(cb, mixins))
+        return;
 }
 
-std::vector<AstNode *> DeclareModule::getChildren()
+void DeclareModule::applyChildren(const std::function<bool (AstNode*)>& cb)
 {
-    return {id, body};
+    if (!applyNode(cb, id))
+        return;
+    if (!applyNode(cb, body))
+        return;
 }
 
-std::vector<AstNode *> DeclareExportDeclaration::getChildren()
+void DeclareExportDeclaration::applyChildren(const std::function<bool (AstNode*)>& cb)
 {
-    return {declaration};
+    if (!applyNode(cb, declaration))
+        return;
 }
 

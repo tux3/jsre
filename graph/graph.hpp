@@ -3,7 +3,10 @@
 
 #include <cstdint>
 #include <vector>
+#include <unordered_map>
+#include <memory>
 
+#include "queries/types.hpp"
 #include "graph/type.hpp"
 #include "graph/basicblock.hpp"
 
@@ -14,22 +17,27 @@ class GraphStart;
 class Graph
 {
 public:
-    Graph();
+    Graph(Function& fun);
+    Function& getFun() const;
     uint16_t size() const;
     const GraphNode &getNode(uint16_t n) const;
     GraphNode &getNode(uint16_t n);
     uint16_t addNode(GraphNode&& node);
     uint16_t addNode(GraphNode&& node, uint16_t prev);
-    uint16_t addNode(GraphNode&& node, std::vector<uint16_t> &prevs);
+    uint16_t addNode(GraphNode &&node, const std::vector<uint16_t> &prevs);
 
     uint16_t blockCount() const;
     const BasicBlock& getBasicBlock(uint16_t n) const;
     BasicBlock& getBasicBlock(uint16_t n);
     BasicBlock &addBasicBlock(std::vector<uint16_t> prevs);
 
+public:
+    std::unordered_map<GraphNode*, TypeInfo> nodeTypes;
+
 private:
     std::vector<GraphNode> nodes;
     std::vector<BasicBlock> blocks;
+    Function& fun;
 };
 
 class GraphNode
@@ -38,6 +46,8 @@ public:
     GraphNode(GraphNodeType type, AstNode* astReference = nullptr);
     GraphNode(GraphNodeType type, uint16_t input, AstNode* astReference = nullptr);
     GraphNode(GraphNodeType type, std::vector<uint16_t> &&inputs, AstNode* astReference = nullptr);
+    GraphNode(const GraphNode& other) = delete;
+    GraphNode(GraphNode&& other) = default;
     virtual ~GraphNode() = default;
 
     GraphNodeType getType() const;
@@ -59,10 +69,12 @@ public:
     void setPrev(uint16_t idx, uint16_t newValue);
     void setNext(uint16_t idx, uint16_t newValue);
 
+    void replacePrev(uint16_t oldValue, uint16_t newValue);
+
 private:
     // TODO: Switch to small vecs, or anything else that doesn't use 24 bytes + 1 allocation per object...
     std::vector<uint16_t> inputs; // Data dependencies
-    std::vector<uint16_t> prev, next; // Control dependencies
+    std::vector<uint16_t> prevs, nexts; // Control dependencies
     // TODO: On x86_64 we can save 7 bytes by putting the node type in the expression pointer (canonical addresses and all).
     AstNode* astReference;
     GraphNodeType type;
