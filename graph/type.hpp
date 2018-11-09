@@ -43,7 +43,8 @@
     X(Break)                    \
     X(Continue)                 \
     X(Loop)                     \
-    X(ForOfLoop)
+    X(ForOfLoop)                \
+    X(Argument)
 
 #define X(GRAPH_NODE_TYPE) GRAPH_NODE_TYPE,
 enum class GraphNodeType : uint8_t {

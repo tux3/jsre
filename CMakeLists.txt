@@ -100,7 +100,7 @@ add_headers_sources(
     ast/ast ast/parse ast/import ast/location ast/walk
     graph/graph graph/graphbuilder graph/dot graph/type graph/basicblock
     transform/blank transform/flow
-    analyze/identresolution analyze/astqueries analyze/unused analyze/conditionals analyze/typecheck
+    analyze/identresolution analyze/astqueries analyze/unused analyze/conditionals analyze/typecheck analyze/typerefinement
     queries/maybe queries/dataflow queries/types queries/typeresolution
 )
 

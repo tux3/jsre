@@ -32,7 +32,7 @@ public:
     BasicBlock &addBasicBlock(std::vector<uint16_t> prevs);
 
 public:
-    std::unordered_map<GraphNode*, TypeInfo> nodeTypes;
+    std::unordered_map<const GraphNode*, TypeInfo> nodeTypes;
 
 private:
     std::vector<GraphNode> nodes;

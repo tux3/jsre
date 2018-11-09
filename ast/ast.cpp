@@ -1142,9 +1142,9 @@ AssignmentPattern::AssignmentPattern(AstSourceSpan location, AstNode* left, AstN
     setParentOfChildren();
 }
 
-Identifier *AssignmentPattern::getLeft()
+AstNode *AssignmentPattern::getLeft()
 {
-    return reinterpret_cast<Identifier*>(left);
+    return left;
 }
 
 AstNode *AssignmentPattern::getRight()

@@ -268,6 +268,18 @@ IdentifierResolutionResult resolveModuleIdentifiers(v8::Local<v8::Context> conte
                 }
                 if (found)
                     break;
+                // Only if we're not refering to a preceding var, we might be referencing a hoisted var
+                for (int varIndex = scope.readCurrentVarDeclaration+1; varIndex<=scope.writeCurrentVarDeclaration; ++varIndex) {
+                    auto prefixedName = to_string(varIndex)+name;
+                    if (auto it = scope.declarations.find(prefixedName); it != scope.declarations.end()) {
+                        identifierTargets.insert({&identifier, it->second});
+                        found = true;
+                        break;
+                    }
+                }
+                if (found)
+                    break;
+                // If it's not a var, we can check other normal declarations
                 if (auto it = scope.declarations.find(name); it != scope.declarations.end()) {
                     identifierTargets.insert({&identifier, it->second});
                     found = true;
@@ -302,6 +314,10 @@ IdentifierResolutionResult resolveModuleIdentifiers(v8::Local<v8::Context> conte
         }
 
         if (isFullScopeNode || isBlockScopeNode) {
+            // Make sure all declarations are registered as referring to themselves
+            for (const auto& pair : scopeDeclarations.back().declarations)
+                identifierTargets[pair.second] = pair.second;
+
             fullScopeLevel -= isFullScopeNode;
             scopeDeclarations.pop_back();
         }
@@ -491,6 +507,24 @@ AstNode *resolveIdentifierDeclaration(Identifier &identifier)
             if (param->getType() == AstNodeType::Identifier) {
                 if (((Identifier*)param)->getName() == identifier.getName())
                     return param;
+            } else if (param->getType() == AstNodeType::AssignmentPattern) {
+                auto assignPattern = (AssignmentPattern*)param;
+                if (assignPattern->getLeft()->getType() == AstNodeType::Identifier) {
+                    if (auto paramId = (Identifier*)assignPattern->getLeft(); paramId->getName() == identifier.getName())
+                        return param;
+                } else {
+                    trace("Cannot handle non-identifier left-side of assignment pattern of function parameters in resolveIdentifierDeclaration");
+                    return nullptr;
+                }
+            } else if (param->getType() == AstNodeType::RestElement) {
+                auto restElem = (RestElement*)param;
+                if (restElem->getArgument()->getType() == AstNodeType::Identifier) {
+                    if (auto paramId = (Identifier*)restElem->getArgument(); paramId->getName() == identifier.getName())
+                        return param;
+                } else {
+                    trace("Cannot handle non-identifier left-side of rest element of function parameters in resolveIdentifierDeclaration");
+                    return nullptr;
+                }
             } else {
                 // TODO: FIXME: Handle more function parameter types than just this!
                 trace("Cannot handle non-identifier function parameters in resolveIdentifierDeclaration");

@@ -12,8 +12,15 @@ set_source_files_properties(
     PROPERTIES OBJECT_DEPENDS "${PROJECT_SOURCE_DIR}/babel.js"
 )
 
+add_custom_command(OUTPUT "${PROJECT_SOURCE_DIR}/yarn.lock"
+    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    COMMAND yarn -s install
+    COMMENT "Installing babel parser with yarn"
+)
+
 add_custom_command(OUTPUT "${PROJECT_SOURCE_DIR}/babel.js"
     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    DEPENDS "${PROJECT_SOURCE_DIR}/yarn.lock"
     COMMAND yarn -s build
     COMMENT "Generating webpack bundle babel.js"
 )

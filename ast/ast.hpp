@@ -846,10 +846,11 @@ private:
     std::vector<AstNode*> elements;
 };
 
+// Typically appears in the parameter for a function
 class AssignmentPattern : public AstNode {
 public:
     AssignmentPattern(AstSourceSpan location, AstNode* left, AstNode* right);
-    Identifier* getLeft();
+    AstNode* getLeft(); // Identifier, ObjectPattern or ArrayPattern
     AstNode* getRight();
     virtual void applyChildren(const std::function<bool (AstNode*)>&) override;
 

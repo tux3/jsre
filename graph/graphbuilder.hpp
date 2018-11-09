@@ -16,6 +16,9 @@ public:
 
 private:
     uint16_t getUndefinedNode();
+    BasicBlock* processArgument(BasicBlock* block, AstNode& node);
+    void hoistFunctionNode(BasicBlock* block, Function &node);
+    void hoistVariableDeclarationNode(BasicBlock* block, VariableDeclaration &node);
     // Returns the basic block where next nodes should be added
     BasicBlock* processAstNode(BasicBlock* block, AstNode& node);
     BasicBlock* processFunctionNode(BasicBlock* block, Function &node);

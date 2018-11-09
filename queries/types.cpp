@@ -61,9 +61,9 @@ TypeInfo TypeInfo::makeFunction(Function& decl)
     return TypeInfo{BaseType::Function, make_shared<FunctionTypeInfo>(decl)};
 }
 
-TypeInfo TypeInfo::makeFunction(std::vector<TypeInfo> &&argumentTypes, TypeInfo returnType)
+TypeInfo TypeInfo::makeFunction(std::vector<TypeInfo> &&argumentTypes, TypeInfo returnType, bool variadic)
 {
-    return TypeInfo{BaseType::Function, make_shared<FunctionTypeInfo>(move(argumentTypes), move(returnType))};
+    return TypeInfo{BaseType::Function, make_shared<FunctionTypeInfo>(move(argumentTypes), move(returnType), variadic)};
 }
 
 TypeInfo TypeInfo::makeClass(Class &decl)
@@ -73,17 +73,17 @@ TypeInfo TypeInfo::makeClass(Class &decl)
 }
 
 template <>
-FunctionTypeInfo* TypeInfo::getExtra() { return ((FunctionTypeInfo*)extra.get())->ensureLazyInit(); }
+const FunctionTypeInfo* TypeInfo::getExtra() const { return ((FunctionTypeInfo*)extra.get())->ensureLazyInit(); }
 template <>
-PromiseTypeInfo* TypeInfo::getExtra() { return (PromiseTypeInfo*)extra.get(); }
+const PromiseTypeInfo* TypeInfo::getExtra() const { return (PromiseTypeInfo*)extra.get(); }
 template <>
-SumTypeInfo* TypeInfo::getExtra() { return (SumTypeInfo*)extra.get(); }
+const SumTypeInfo* TypeInfo::getExtra() const { return (SumTypeInfo*)extra.get(); }
 template <>
-ObjectTypeInfo* TypeInfo::getExtra() { return (ObjectTypeInfo*)extra.get(); }
+const ObjectTypeInfo* TypeInfo::getExtra() const { return (ObjectTypeInfo*)extra.get(); }
 template <>
-ClassTypeInfo* TypeInfo::getExtra() { return ((ClassTypeInfo*)extra.get())->ensureLazyInit(); }
+const ClassTypeInfo* TypeInfo::getExtra() const { return ((ClassTypeInfo*)extra.get())->ensureLazyInit(); }
 template <>
-const string* TypeInfo::getExtra() { return (const string*)((LiteralTypeInfo*)extra.get())->data; }
+const string* TypeInfo::getExtra() const { return (const string*)((LiteralTypeInfo*)extra.get())->data; }
 
 
 TypeInfo::TypeInfo(BaseType baseType, std::shared_ptr<ExtraTypeInfo>&& extra)
@@ -97,13 +97,14 @@ FunctionTypeInfo::FunctionTypeInfo(Function& decl)
     // Actual init is done lazily
 }
 
-FunctionTypeInfo::FunctionTypeInfo(std::vector<TypeInfo> &&argumentTypes, TypeInfo returnType)
-    : staticDefinition { nullptr }, argumentTypes{move(argumentTypes)}, returnType{returnType}, lazyInitDone{true}
+FunctionTypeInfo::FunctionTypeInfo(std::vector<TypeInfo> &&argumentTypes, TypeInfo returnType, bool variadic)
+    : staticDefinition { nullptr }, argumentTypes{move(argumentTypes)}, returnType{returnType}, variadic{variadic}, lazyInitDone{true}
 {
     GenericHash gh;
     for (const auto& arg : argumentTypes)
         arg.hash(gh);
     returnType.hash(gh);
+    gh.update(&variadic, sizeof(variadic));
     gh.final(hash);
 }
 
@@ -127,6 +128,8 @@ FunctionTypeInfo *FunctionTypeInfo::ensureLazyInit()
             argumentTypes.push_back(paramType);
         }
 
+        variadic = !staticDefinition->getParams().empty() && staticDefinition->getParams().back()->getType() == AstNodeType::RestElement;
+
         if (auto typeAnnotation = staticDefinition->getReturnTypeAnnotation()) {
             returnType = resolveAstAnnotationType(*typeAnnotation);
             if (staticDefinition->isAsync())
@@ -140,6 +143,7 @@ FunctionTypeInfo *FunctionTypeInfo::ensureLazyInit()
     for (const auto& arg : argumentTypes)
         arg.hash(gh);
     returnType.hash(gh);
+    gh.update(&variadic, sizeof(variadic));
     gh.final(hash);
 
     return this;

@@ -48,7 +48,13 @@ static TypeInfo resolveFunctionTypeAnnotation(FunctionTypeAnnotation& node)
     for (auto paramNode : node.getParams())
         argumentTypes.push_back(resolveAstAnnotationType(*paramNode->getTypeAnnotation()));
 
-    return TypeInfo::makeFunction(move(argumentTypes), resolveAstAnnotationType(*node.getReturnType()));
+    bool variadic = false;
+    if (FunctionTypeParam* rest = node.getRestParam()) {
+        variadic = true;
+        argumentTypes.push_back(resolveAstAnnotationType(*rest->getTypeAnnotation()));
+    }
+
+    return TypeInfo::makeFunction(move(argumentTypes), resolveAstAnnotationType(*node.getReturnType()), variadic);
 }
 
 static TypeInfo resolveInterfaceDeclaration(InterfaceDeclaration& node)
@@ -148,7 +154,7 @@ TypeInfo resolveAstNodeType(AstNode& node)
     }
 }
 
-static TypeInfo resolveCallNode(Graph& graph, GraphNode* node)
+static TypeInfo resolveCallNode(Graph& graph, const GraphNode* node)
 {
     GraphNode* callee = &graph.getNode(node->getInput(0));
     TypeInfo calleeBaseType = resolveNodeType(graph, callee);
@@ -159,7 +165,7 @@ static TypeInfo resolveCallNode(Graph& graph, GraphNode* node)
     return calleeType->returnType;
 }
 
-static TypeInfo resolveNewCallNode(Graph& graph, GraphNode* node)
+static TypeInfo resolveNewCallNode(Graph& graph, const GraphNode* node)
 {
     GraphNode* callee = &graph.getNode(node->getInput(0));
     TypeInfo calleeBaseType = resolveNodeType(graph, callee);
@@ -176,7 +182,7 @@ static TypeInfo resolveNewCallNode(Graph& graph, GraphNode* node)
     }
 }
 
-static TypeInfo resolveCatchType(Graph& graph, GraphNode* catchNode)
+static TypeInfo resolveCatchType(Graph& graph, const GraphNode* catchNode)
 {
     auto prevCount = catchNode->prevCount();
 
@@ -251,7 +257,7 @@ TypeInfo resolveReturnType(Function &fun)
     return TypeInfo::makeSum(move(types));
 }
 
-TypeInfo resolveNodeType(Graph& graph, GraphNode* node)
+TypeInfo resolveNodeType(Graph& graph, const GraphNode* node)
 {
     if (auto it = graph.nodeTypes.find(node); it != graph.nodeTypes.end())
         return it->second;
@@ -260,6 +266,8 @@ TypeInfo resolveNodeType(Graph& graph, GraphNode* node)
 
     if (node->getType() == GraphNodeType::Literal) {
         type = resolveAstNodeType(*node->getAstReference());
+    } else if (node->getType() == GraphNodeType::Undefined) {
+        type = TypeInfo::makeUndefined();
     } else if (node->getType() == GraphNodeType::LoadValue) {
         AstNode* decl = resolveIdentifierDeclaration((Identifier&)*node->getAstReference());
         if (decl) {
@@ -267,9 +275,20 @@ TypeInfo resolveNodeType(Graph& graph, GraphNode* node)
                 type = TypeInfo::makeFunction((Function&)*decl);
             } else if (decl->getType() == AstNodeType::ClassDeclaration || decl->getType() == AstNodeType::ClassExpression) {
                 type = TypeInfo::makeClass((Class&)*decl);
-            } else if (decl->getType() == AstNodeType::Identifier && decl->getParent() == &graph.getFun()) { // We're loading an argument
-                if (auto typeAnnotation = ((Identifier*)decl)->getTypeAnnotation())
-                    type = resolveAstAnnotationType(*typeAnnotation->getTypeAnnotation());
+            } else if (decl->getType() == AstNodeType::Identifier) {
+                auto declId = (Identifier*)decl;
+                if (decl->getParent() == &graph.getFun()) { // We're loading an argument
+                    // TOD: FIXME: Some arguments are patterns, their parent isn't the function... Fix condition above
+                    if (auto typeAnnotation = declId->getTypeAnnotation())
+                        type = resolveAstAnnotationType(*typeAnnotation->getTypeAnnotation());
+                }
+            } else if (decl->getType() == AstNodeType::VariableDeclarator) { // We can do the bare minimum to resolve global variables' types
+                auto varDecl = (VariableDeclarator*)decl;
+                if (varDecl->getId()->getType() == AstNodeType::Identifier) {
+                    auto varDeclId = (Identifier*)varDecl->getId();
+                    if (auto annotation = varDeclId->getTypeAnnotation())
+                        type = resolveAstAnnotationType(*annotation->getTypeAnnotation());
+                }
             }
         }
     } else if (node->getType() == GraphNodeType::Call) {
@@ -305,7 +324,7 @@ TypeInfo resolveNodeType(Graph& graph, GraphNode* node)
                     // TODO: Try to statically resolve the property name? (are there many usecases where we statically can?)
                     TypeInfo keyType = resolveNodeType(graph, &graph.getNode(input.getInput(1)));
                     if (keyType.getBaseType() == BaseType::String && keyType.hasExtra()) {
-                        auto key = keyType.getExtra<const string>();
+                        auto key = keyType.getExtra<string>();
                         propTypes[*key] = value;
                     } else {
                         propKeysKnown = false;

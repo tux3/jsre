@@ -128,7 +128,8 @@ static v8::Local<v8::Object> makeBabelObject(IsolateWrapper& isolateWrapper)
     }
 
     auto script = unboundScript->BindToCurrentContext();
-    Local<Object> babelObject = script->Run(context).ToLocalChecked().As<Object>();
+    script->Run(context).ToLocalChecked();
+    Local<Object> babelObject = context->Global()->Get(String::NewFromUtf8(isolate, "babylon")).As<Object>();
     return handleScope.Escape(babelObject);
 }
 

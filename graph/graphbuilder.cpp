@@ -16,6 +16,9 @@ std::unique_ptr<Graph> GraphBuilder::buildFromAst()
 {
     graph = make_unique<Graph>(fun);
 
+    for (const auto& param : fun.getParams())
+        processArgument(&graph->getBasicBlock(0), *param);
+
     AstNode* body = fun.getBody();
     auto* block = processAstNode(&graph->getBasicBlock(0), *body);
     if (body->getType() != AstNodeType::BlockStatement)
@@ -33,7 +36,7 @@ std::unique_ptr<Graph> GraphBuilder::buildFromAst()
         assert(node.getType() != GraphNodeType::Phi || node.inputCount() > 0 );
         for (uint16_t j=0; j<node.inputCount(); ++j) {
             if (node.getInput(j) == 0)
-                error(fun, fun.getSourceString());
+                trace(fun, "About to fail graphbuilder assert for function:\n"+fun.getSourceString());
             assert(node.getInput(j) != 0);
         }
     }
@@ -61,12 +64,26 @@ uint16_t GraphBuilder::getUndefinedNode()
     return undefinedNode;
 }
 
+BasicBlock *GraphBuilder::processArgument(BasicBlock *block, AstNode &node)
+{
+    // TODO: FIXME: Preprocess all the parameters, add nodes, and declare them as variables in the root basic block. Then just work with the variables.
+    return block;
+}
+
 BasicBlock* GraphBuilder::processAstNode(BasicBlock* block, AstNode &node)
 {
     switch (node.getType()) {
     case AstNodeType::EmptyStatement:
         break;
     case AstNodeType::BlockStatement:
+        // Hoisting first
+        node.applyChildren([&](AstNode* child) {
+            if (isFunctionNode(*child))
+                hoistFunctionNode(block, *(Function*)child);
+            else if (child->getType() == AstNodeType::VariableDeclaration)
+                hoistVariableDeclarationNode(block, *(VariableDeclaration*)child);
+            return true;
+        });
         node.applyChildren([&](AstNode* child) {
             block = processAstNode(block, *child);
             if (child->getType() == AstNodeType::ReturnStatement || child->getType() == AstNodeType::ThrowStatement)
@@ -711,7 +728,11 @@ BasicBlock *GraphBuilder::processIdentifierNode(BasicBlock *block, Identifier &n
         block->setNewest(*existingVar);
     } else if (isChildOf(declarationIdentifier, *fun.getBody())) {
         // The variable isn't local to this basic block, we need to run global value numbering
-        block->setNewest(block->readNonlocalVariable(*declarationIdentifier));
+        auto value = block->readNonlocalVariable(*declarationIdentifier);
+        if (value == 0)
+            trace(fun, "About to fail graphbuilder assert for function:\n"+fun.getSourceString());
+        assert(value != 0);
+        block->setNewest(value);
     } else {
         block->addNode({GraphNodeType::LoadValue, &node}, block->getNext());
     }
@@ -862,12 +883,7 @@ BasicBlock* GraphBuilder::processVariableDeclarationNode(BasicBlock* block, Vari
     for (VariableDeclarator* decl : decls) {
         AstNode* init = decl->getInit();
         AstNode* idNode = decl->getId();
-        if (node.getKind() == VariableDeclaration::Kind::Var) {
-            auto startBlock = block->getSelfId() ? &graph->getBasicBlock(0) : block;
-            startBlock->writeVariable((Identifier*)idNode, getUndefinedNode());
-        }
         if (init) {
-            trace(*decl->getId(), "Write val");
             block = processAstNode(block, *init);
             if (idNode->getType() == AstNodeType::Identifier) {
                 block->writeVariable((Identifier*)idNode, block->getNewest());
@@ -878,11 +894,22 @@ BasicBlock* GraphBuilder::processVariableDeclarationNode(BasicBlock* block, Vari
                 throw runtime_error("GraphBuilder cannot handle declaration with "s+idNode->getTypeName()+" left-hand side");
             }
         } else {
-            trace(*decl->getId(), "Write undefined");
             block->writeVariable((Identifier*)idNode, getUndefinedNode());
         }
     }
     return block;
+}
+
+void GraphBuilder::hoistVariableDeclarationNode(BasicBlock* block, VariableDeclaration &node)
+{
+    // This just pre-declares the undefined variables early in the basic block, the value will be re-defined at the actual declaration
+    if (node.getKind() != VariableDeclaration::Kind::Var)
+        return;
+    auto& decls = ((VariableDeclaration&)node).getDeclarators();
+    for (VariableDeclarator* decl : decls) {
+        auto startBlock = block->getSelfId() ? &graph->getBasicBlock(0) : block;
+        startBlock->writeVariable((Identifier*)decl->getId(), getUndefinedNode());
+    }
 }
 
 BasicBlock *GraphBuilder::processObjectPatternNode(BasicBlock *block, ObjectPattern &node, uint16_t object)
@@ -936,14 +963,26 @@ BasicBlock *GraphBuilder::processMemberExprNode(BasicBlock *block, MemberExpress
 
 BasicBlock* GraphBuilder::processFunctionNode(BasicBlock* block, Function &node)
 {
-    block->addNode({GraphNodeType::Function, &node}, block->getNext());
+    // Hoisting may have already declared this function (if it was visible from a block, and not an expression)
+    if (auto existingVar = block->readVariable(node.getId())) {
+        block->setNewest(*existingVar);
+    } else {
+        block->addNode({GraphNodeType::Function, &node}, block->getNext());
+        if (auto* id = node.getId()) {
+            assert(node.getType() == AstNodeType::FunctionExpression || node.getType() == AstNodeType::FunctionDeclaration);
+            block->writeVariable(id, block->getNewest());
+        }
+    }
+    return block;
+}
 
+void GraphBuilder::hoistFunctionNode(BasicBlock* block, Function &node)
+{
+    block->addNode({GraphNodeType::Function, &node}, block->getNext());
     if (auto* id = node.getId()) {
         assert(node.getType() == AstNodeType::FunctionExpression || node.getType() == AstNodeType::FunctionDeclaration);
         block->writeVariable(id, block->getNewest());
     }
-
-    return block;
 }
 
 BasicBlock *GraphBuilder::processUnaryExprNode(BasicBlock *block, UnaryExpression &node)

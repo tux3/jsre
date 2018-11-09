@@ -56,7 +56,7 @@ public:
     static TypeInfo makeString(const std::string& value); // Value must live as long as the TypeInfo!
     static TypeInfo makeObject(std::unordered_map<std::string, TypeInfo>&& props, bool strict);
     static TypeInfo makeFunction(Function& decl);
-    static TypeInfo makeFunction(std::vector<TypeInfo>&& argumentTypes, TypeInfo returnType);
+    static TypeInfo makeFunction(std::vector<TypeInfo>&& argumentTypes, TypeInfo returnType, bool variadic);
     static TypeInfo makeClass(Class& decl);
     static TypeInfo makePromise(const TypeInfo& nestedType);
     static TypeInfo makeSum(std::vector<TypeInfo>&& types);
@@ -64,7 +64,7 @@ public:
     BaseType getBaseType() const;
     const char* baseTypeName() const;
     bool hasExtra() const;
-    template <class E> E* getExtra();
+    template <class E> const E* getExtra() const;
     void hash(GenericHash& gh) const; // Udpates gh with the hash of this type
 
     operator bool() const; // True iff base type is not unknown
@@ -80,28 +80,29 @@ private:
 };
 
 template <>
-FunctionTypeInfo* TypeInfo::getExtra();
+const FunctionTypeInfo* TypeInfo::getExtra() const;
 template <>
-PromiseTypeInfo* TypeInfo::getExtra();
+const PromiseTypeInfo* TypeInfo::getExtra() const;
 template <>
-SumTypeInfo* TypeInfo::getExtra();
+const SumTypeInfo* TypeInfo::getExtra() const;
 template <>
-ObjectTypeInfo* TypeInfo::getExtra();
+const ObjectTypeInfo* TypeInfo::getExtra() const;
 template <>
-ClassTypeInfo* TypeInfo::getExtra();
+const ClassTypeInfo* TypeInfo::getExtra() const;
 template <>
-const std::string* TypeInfo::getExtra();
+const std::string* TypeInfo::getExtra() const;
 
 struct FunctionTypeInfo : public ExtraTypeInfo
 {
     FunctionTypeInfo(Function& decl);
-    FunctionTypeInfo(std::vector<TypeInfo>&& argumentTypes, TypeInfo returnType);
+    FunctionTypeInfo(std::vector<TypeInfo>&& argumentTypes, TypeInfo returnType, bool variadic);
     FunctionTypeInfo* ensureLazyInit();
     virtual bool operator==(const ExtraTypeInfo& otherBase) const override;
 
     Function* staticDefinition;
-    std::vector<TypeInfo> argumentTypes;
+    std::vector<TypeInfo> argumentTypes; // If variadic, the last argumentType is the variadic one
     TypeInfo returnType;
+    bool variadic;
 
 private:
     bool lazyInitDone;

@@ -1,9 +1,11 @@
 {
   "license": "MIT",
   "dependencies": {
-    "babylon": "^7.0.0"
+    "@babel/parser": "^7.1.0",
+    "webpack": "^4.25.1",
+    "webpack-cli": "^3.1.2"
   },
   "scripts": {
-    "build": "webpack --display errors-only node_modules/babylon/lib/index.js babel.js"
+    "build": "yarn run webpack --display errors-only --mode=production --output-library babylon --output-library-target this -o babel.js node_modules/@babel/parser/lib/index.js"
   }
 }

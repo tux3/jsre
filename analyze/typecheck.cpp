@@ -3,6 +3,7 @@
 #include "ast/walk.hpp"
 #include "analyze/astqueries.hpp"
 #include "analyze/identresolution.hpp"
+#include "analyze/typerefinement.hpp"
 #include "module/module.hpp"
 #include "graph/graphbuilder.hpp"
 #include "graph/dot.hpp"
@@ -11,10 +12,18 @@
 #include <vector>
 #include <unordered_map>
 #include <unordered_set>
+#include <queue>
 
 using namespace std;
 
-// NOTE: Be careful when checking a return type, if the function is async you should ensure found is wrapped in a promise before checking it
+static TypeInfo resolveScopedNodeType(Graph& graph, const GraphNode* node, ScopedTypes const& scope)
+{
+    if (auto it = scope.types.find(node); it != scope.types.end())
+        return it->second;
+    return resolveNodeType(graph, node);
+}
+
+// NOTE: Be careful when checking a return type, if the function is async callers should ensure found is wrapped in a promise before passing it in
 static void checkTypesCompatibility(AstNode& foundNode, const TypeInfo& found, const TypeInfo& expected)
 {
     // Nothing we can do if we just don't have the information
@@ -51,11 +60,11 @@ static void checkTypesCompatibility(AstNode& foundNode, const TypeInfo& found, c
     }
 }
 
-static void checkCallNode(Graph& graph, GraphNode* node)
+static void checkCallNode(Graph& graph, GraphNode* node, ScopedTypes const& scope)
 {
     auto& callAstNode = (CallExpression&)*node->getAstReference();
     GraphNode* callee = &graph.getNode(node->getInput(0));
-    TypeInfo calleeBaseType = resolveNodeType(graph, callee);
+    TypeInfo calleeBaseType = resolveScopedNodeType(graph, callee, scope);
 
     if (calleeBaseType.getBaseType() != BaseType::Function) {
         if (calleeBaseType.getBaseType() != BaseType::Unknown) {
@@ -68,16 +77,16 @@ static void checkCallNode(Graph& graph, GraphNode* node)
     size_t calleeArgCount = calleeType->argumentTypes.size();
     size_t nodeInputArgs = node->inputCount() - 1;
     size_t args = std::min(calleeArgCount, nodeInputArgs);
-    if (nodeInputArgs > calleeArgCount)
+    if (nodeInputArgs > calleeArgCount && !calleeType->variadic)
         warn(callAstNode, "Function only takes "+to_string(calleeArgCount)+" arguments, but "+to_string(nodeInputArgs)+" were provided");
     for (uint16_t i=0; i<args; ++i) {
         GraphNode* argNode = &graph.getNode(node->getInput(i+1));
-        TypeInfo argBaseType = resolveNodeType(graph, argNode);
+        TypeInfo argBaseType = resolveScopedNodeType(graph, argNode, scope);
         checkTypesCompatibility(*callAstNode.getArguments()[i], argBaseType, calleeType->argumentTypes[i]);
     }
 }
 
-static void checkPropertyLoad(Graph& graph, GraphNode* node)
+static void checkPropertyLoad(Graph& graph, GraphNode* node, ScopedTypes const& scope)
 {
     bool knownPropName = false;
     std::string propName;
@@ -114,40 +123,106 @@ static void checkPropertyLoad(Graph& graph, GraphNode* node)
     }
 }
 
-void typecheckGraph(Graph& graph)
+static TypeInfo mergeTypes(const vector<const TypeInfo*>& typesToMerge)
 {
-    trace("Graph data:\n"+graphToDOT(graph));
+    vector<TypeInfo> types;
 
-    unordered_set<uint16_t> visited;
-    vector<GraphNode*> controlNodes = {&graph.getNode(0)};
-    while (!controlNodes.empty()) {
-        GraphNode* node = controlNodes.back();
-        controlNodes.pop_back();
-
-        // TODO: FIXME: Keep a "scope chain" of objects that are modified without reassignment
-        // Normal reassignments are taken into account through readVariable/writeVariable and Phis,
-        // but things like StoreNamedProperty, function calls modifying arguments, or aliased/escaping properties change a type without assignment!
-        //
-        // We need to keep a map of the known changes on top of the last writeVariable node (like StoreNamedProperties).
-        // When reading any input node, we first check in our maps if we have an updated type, otherwise we can just resolve the input node's type
-        // For branches, we create a new scope on each side and process each side separately.
-        // At the end we merge all changes from all the child scopes into the parent scope. This can really just be marking all written types as Unknown in the parent scope...
-        // (Of course we only need to do that if the child scope actually merges back into the parent scope instead of returning or throwing through)
-
-        for (uint16_t i=0; i<node->nextCount(); ++i) {
-            auto nextNodeId = node->getNext(i);
-            if (visited.insert(nextNodeId).second)
-                controlNodes.push_back(&graph.getNode(nextNodeId));
+    // TODO: Don't do a quadratic search! Fix TypeInfo to be hashable and put that in a set or something...
+    auto addIfNotExists = [&types](const TypeInfo* newType) {
+        bool found = false;
+        for (const auto& existingType : types) {
+            if (*newType == existingType) {
+                found = true;
+                break;
+            }
         }
+        if (!found)
+            types.push_back(*newType);
+    };
 
-        resolveNodeType(graph, node);
+    for (const TypeInfo* type : typesToMerge) {
+        if (type->getBaseType() == BaseType::Unknown) {
+            return TypeInfo::makeUnknown();
+        } else if (type->getBaseType() == BaseType::Sum) {
+            const auto& elems = type->getExtra<SumTypeInfo>()->elements;
+            for (const auto& elem : elems)
+                addIfNotExists(&elem);
+        } else {
+            addIfNotExists(type);
+        }
+    }
 
-        auto type = node->getType();
-        if (type == GraphNodeType::Call) {
-            checkCallNode(graph, node);
-        } else if (type == GraphNodeType::LoadNamedProperty
-                   || type == GraphNodeType::LoadProperty) {
-            checkPropertyLoad(graph, node);
+    if (types.size() == 0) {
+        trace("Merging types resulted in an impossible empty type!");
+        throw std::runtime_error("Merging types resulted in an impossible empty type!");
+    }
+    if (types.size() == 1)
+        return types[0];
+
+    return TypeInfo::makeSum(move(types));
+}
+
+static ScopedTypes mergeScopes(ScopedTypes const& oldScope)
+{
+    unordered_set<ScopedTypes*> const& prevs = oldScope.prevs;
+    ScopedTypes mergedScope = oldScope;
+
+    unordered_map<const GraphNode*, vector<const TypeInfo*>> typesToMerge;
+    for (const auto& prev : prevs)
+        for (const auto& identType : prev->types)
+            typesToMerge[identType.first].push_back(&identType.second);
+
+    for (const auto& typeToMerge : typesToMerge)
+        mergedScope.types[typeToMerge.first] = mergeTypes(typeToMerge.second);
+
+    return mergedScope;
+}
+
+static void typecheckNode(Graph& graph, GraphNode* node, ScopedTypes& scope)
+{
+    auto type = node->getType();
+    if (type == GraphNodeType::Call) {
+        checkCallNode(graph, node, scope);
+    } else if (type == GraphNodeType::LoadNamedProperty
+               || type == GraphNodeType::LoadProperty) {
+        checkPropertyLoad(graph, node, scope);
+    }
+}
+
+static void runTypechecksInBranch(Graph& graph, unordered_map<GraphNode*, ScopedTypes>& scopes, queue<GraphNode*>& scopesToVisit, GraphNode* node)
+{
+    ScopedTypes& scope = scopes[node];
+    if (scope.visited) {
+        ScopedTypes mergedScope = mergeScopes(scope);
+        if (mergedScope.types == scope.types)
+            return;
+    }
+    scope.visited++;
+    refineTypes(graph, scope, node);
+
+    for (;;) {
+        typecheckNode(graph, node, scope);
+
+        if (node->nextCount() == 0) {
+            return;
+        } else if (node->nextCount() == 1) {
+            auto nextNodeId = node->getNext(0);
+            node = &graph.getNode(nextNodeId);
+            if (node->prevCount() != 1) {
+                ScopedTypes& mergeScope = scopes[node];
+                mergeScope.prevs.insert(&scope);
+                scopesToVisit.push(node);
+                return;
+            }
+        } else {
+            unordered_set<GraphNode*> nextScopesToVisit;
+            for (uint16_t i=0; i<node->nextCount(); ++i)
+                nextScopesToVisit.insert(&graph.getNode(node->getNext(i)));
+            for (auto scopeNode : nextScopesToVisit) {
+                scopes[scopeNode].prevs.insert(&scope);
+                scopesToVisit.push(scopeNode);
+            }
+            return;
         }
     }
 }
@@ -164,6 +239,22 @@ void runTypechecks(Module &module)
         auto graph = module.getFunctionGraph(fun);
         if (!graph)
             return;
-        typecheckGraph(*graph);
+        trace("Graph data:\n"+graphToDOT(*graph));
+
+        unordered_map<GraphNode*, ScopedTypes> scopes;
+        queue<GraphNode*> scopesToVisit;
+
+        /*
+         * TODO:
+         * - Add graph nodes for arguments
+         * - Make sure type refinement works for arguments
+         */
+
+        scopesToVisit.push(&graph->getNode(0));
+        while (!scopesToVisit.empty()) {
+            auto next = scopesToVisit.front();
+            scopesToVisit.pop();
+            runTypechecksInBranch(*graph, scopes, scopesToVisit, next);
+        }
     });
 }

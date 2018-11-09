@@ -29,13 +29,16 @@ uint16_t BasicBlock::getNewest()
     return newest;
 }
 
+#include "ast/ast.hpp"
+#include "utils/reporting.hpp"
+
 uint16_t BasicBlock::readNonlocalVariable(Identifier &declIdentifier)
 {
     if (uint16_t* existingVar = readVariable(&declIdentifier))
         return *existingVar;
 
     // NOTE: This assert is overzealous, undeclared variables can trigger it (bug so will our bugs!)
-    assert(getPrevs().size());
+    //assert(getPrevs().size());
 
     uint16_t result;
     if (!isSealed()) {
