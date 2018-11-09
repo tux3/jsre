@@ -48,6 +48,18 @@ static bool isIdentifierOfExportedDeclaration(Identifier& id)
             || parent->getType() == AstNodeType::ExportDefaultDeclaration;
 }
 
+static bool isFunctionNamedForStacktraces(Identifier& id)
+{
+    if (!isFunctionNode(*id.getParent()))
+        return false;
+    auto& parent = (Function&)*id.getParent();
+
+    if (parent.getId() != &id)
+        return false;
+
+    return parent.getParent()->getType() == AstNodeType::ObjectProperty;
+}
+
 void findUnusedLocalDeclarations(Module &module)
 {
     const auto& declarationsXRefs = module.getLocalXRefs();
@@ -67,6 +79,10 @@ void findUnusedLocalDeclarations(Module &module)
 
         // Non-type identifiers in type declarations, like paraneter names, are not unused since they are unscope
         if (isUnscopedTypeIdentifier(identifier))
+            continue;
+
+        // When writing {foo: function foo() {}}, the function name is unused, but without it the function looks anonymous in stacktraces
+        if (isFunctionNamedForStacktraces(identifier))
             continue;
 
         // There's no way to remove unused params in a function expression, so no warning, but it's convention to start their name with a '_'
