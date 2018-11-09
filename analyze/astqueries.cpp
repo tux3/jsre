@@ -57,8 +57,12 @@ bool isUnscopedTypeIdentifier(Identifier& node)
 bool isFunctionalExpressionArgumentIdentifier(Identifier &node)
 {
     auto parentType = node.getParent()->getType();
-    return parentType == AstNodeType::ArrowFunctionExpression
-            || parentType == AstNodeType::FunctionExpression;
+    if (parentType != AstNodeType::ArrowFunctionExpression
+            && parentType != AstNodeType::FunctionExpression)
+        return false;
+    auto& fun = (Function&)*node.getParent();
+    const auto& params = fun.getParams();
+    return find(params.begin(), params.end(), &node) != params.end();
 }
 
 bool isFunctionParameterIdentifier(Identifier &node)
