@@ -4,7 +4,7 @@
 #include "graph/graph.hpp"
 #include "analyze/identresolution.hpp"
 #include "module/module.hpp"
-#include "reporting.hpp"
+#include "utils/reporting.hpp"
 
 #include <utility>
 #include <cassert>

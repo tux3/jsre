@@ -4,7 +4,7 @@
 #include <memory>
 #include <vector>
 #include <unordered_map>
-#include "hash.hpp"
+#include "utils/hash.hpp"
 
 class AstNode;
 class Function;

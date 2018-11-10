@@ -152,8 +152,6 @@ uint16_t BasicBlock::addNode(GraphNode &&node, std::vector<uint16_t> &prevs, boo
     return newest;
 }
 
-#include "reporting.hpp"
-
 uint16_t BasicBlock::addPhi(std::vector<uint16_t>&& inputs)
 {
     assert(prevs.size() > 0);

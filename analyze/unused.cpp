@@ -1,6 +1,6 @@
 #include "unused.hpp"
 #include "module/module.hpp"
-#include "reporting.hpp"
+#include "utils/reporting.hpp"
 #include "ast/ast.hpp"
 #include "analyze/astqueries.hpp"
 #include <string>

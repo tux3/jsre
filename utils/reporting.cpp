@@ -1,4 +1,4 @@
-#include "reporting.hpp"
+#include "utils/reporting.hpp"
 #include "ast/ast.hpp"
 #include "module/module.hpp"
 #include <iostream>

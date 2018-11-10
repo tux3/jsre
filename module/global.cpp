@@ -1,5 +1,5 @@
 #include "global.hpp"
-#include "isolatewrapper.hpp"
+#include "v8/isolatewrapper.hpp"
 #include "module/nativemodule.hpp"
 #include "module/moduleresolver.hpp"
 #include <unordered_map>

@@ -1,7 +1,7 @@
 ﻿#include "graphbuilder.hpp"
 #include "ast/walk.hpp"
 #include "analyze/astqueries.hpp"
-#include "reporting.hpp"
+#include "utils/reporting.hpp"
 #include "module/module.hpp"
 #include <cassert>
 

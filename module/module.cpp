@@ -12,8 +12,8 @@
 #include "transform/flow.hpp"
 #include "global.hpp"
 #include "moduleresolver.hpp"
-#include "reporting.hpp"
-#include "utils.hpp"
+#include "utils/reporting.hpp"
+#include "utils/utils.hpp"
 #include <limits>
 #include <cassert>
 #include <v8.h>

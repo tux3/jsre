@@ -2,7 +2,7 @@
 #include "ast/ast.hpp"
 #include "ast/walk.hpp"
 #include "analyze/astqueries.hpp"
-#include "reporting.hpp"
+#include "utils/reporting.hpp"
 #include "module/moduleresolver.hpp"
 #include <cassert>
 #include <vector>

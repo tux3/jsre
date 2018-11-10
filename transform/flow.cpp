@@ -1,7 +1,7 @@
 #include "flow.hpp"
 #include "ast/ast.hpp"
 #include "ast/walk.hpp"
-#include "reporting.hpp"
+#include "utils/reporting.hpp"
 #include "transform/blank.hpp"
 #include <cctype>
 

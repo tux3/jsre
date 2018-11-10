@@ -1,9 +1,8 @@
-#include "global.hpp"
-#include "isolatewrapper.hpp"
 #include "module/moduleresolver.hpp"
-#include "reporting.hpp"
+#include "v8/isolatewrapper.hpp"
 #include "ast/parse.hpp"
-#include "utils.hpp"
+#include "utils/utils.hpp"
+#include "utils/reporting.hpp"
 #include <filesystem>
 #include <getopt.h>
 #include <iostream>

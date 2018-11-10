@@ -6,7 +6,7 @@
 #include "module/module.hpp"
 #include "graph/graphbuilder.hpp"
 #include "graph/dot.hpp"
-#include "reporting.hpp"
+#include "utils/reporting.hpp"
 #include "queries/typeresolution.hpp"
 #include <vector>
 #include <unordered_map>

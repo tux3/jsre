@@ -1,8 +1,8 @@
 #include "moduleresolver.hpp"
 #include "ast/ast.hpp"
-#include "utils.hpp"
-#include "isolatewrapper.hpp"
-#include "reporting.hpp"
+#include "v8/isolatewrapper.hpp"
+#include "utils/utils.hpp"
+#include "utils/reporting.hpp"
 #include "analyze/identresolution.hpp"
 #include <filesystem>
 #include <json.hpp>

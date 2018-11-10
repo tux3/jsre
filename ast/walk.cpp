@@ -1,6 +1,6 @@
 #include "ast/walk.hpp"
 #include "ast/ast.hpp"
-#include "utils.hpp"
+#include "utils/utils.hpp"
 
 using namespace std;
 

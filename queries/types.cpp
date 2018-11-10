@@ -1,6 +1,6 @@
 #include "types.hpp"
 #include "ast/ast.hpp"
-#include "reporting.hpp"
+#include "utils/reporting.hpp"
 #include "queries/typeresolution.hpp"
 #include "analyze/astqueries.hpp"
 #include "module/module.hpp"

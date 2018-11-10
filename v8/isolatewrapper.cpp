@@ -1,6 +1,6 @@
-#include "isolatewrapper.hpp"
-#include "global.hpp"
-#include "utils.hpp"
+#include "v8/isolatewrapper.hpp"
+#include "module/global.hpp"
+#include "utils/utils.hpp"
 #include "v8.hpp"
 
 using namespace v8;

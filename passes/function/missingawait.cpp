@@ -1,5 +1,5 @@
 #include "module/module.hpp"
-#include "reporting.hpp"
+#include "utils/reporting.hpp"
 #include "ast/ast.hpp"
 #include "ast/walk.hpp"
 #include "analyze/astqueries.hpp"

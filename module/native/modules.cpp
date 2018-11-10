@@ -1,6 +1,6 @@
 #include "module/native/modules.hpp"
-#include "isolatewrapper.hpp"
-#include "utils.hpp"
+#include "v8/isolatewrapper.hpp"
+#include "utils/utils.hpp"
 #include <v8.h>
 
 #define X(MODULE) \

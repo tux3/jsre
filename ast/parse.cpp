@@ -1,8 +1,8 @@
 #include "ast/parse.hpp"
-#include "utils.hpp"
 #include "ast/import.hpp"
-#include "reporting.hpp"
-#include "isolatewrapper.hpp"
+#include "utils/utils.hpp"
+#include "utils/reporting.hpp"
+#include "v8/isolatewrapper.hpp"
 #include <atomic>
 #include <thread>
 #include <cstring>

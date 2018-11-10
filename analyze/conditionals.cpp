@@ -2,7 +2,7 @@
 #include "module/module.hpp"
 #include "ast/ast.hpp"
 #include "ast/walk.hpp"
-#include "reporting.hpp"
+#include "utils/reporting.hpp"
 #include <unordered_map>
 #include <string>
 

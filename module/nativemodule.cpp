@@ -1,7 +1,7 @@
 #include "nativemodule.hpp"
-#include "isolatewrapper.hpp"
+#include "v8/isolatewrapper.hpp"
 #include "module/native/modules.hpp"
-#include "utils.hpp"
+#include "utils/utils.hpp"
 
 #include <v8.h>
 

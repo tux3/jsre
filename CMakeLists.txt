@@ -67,7 +67,7 @@ function(add_v8_startup_snapshot basename_list)
     set(SNAPSHOT_BASE_PATH ${V8_SNAPSHOTS_DIR})
     foreach(basename ${ARGV})
         set(SNAPSHOT_NAME ${basename})
-        configure_file(${PROJECT_SOURCE_DIR}/v8_startup_snapshots.asm.in "${PROJECT_BINARY_DIR}/generated/snapshots/${basename}.asm")
+        configure_file(${PROJECT_SOURCE_DIR}/v8/v8_startup_snapshots.asm.in "${PROJECT_BINARY_DIR}/generated/snapshots/${basename}.asm")
         # OBJECT_DEPENDS is necessary to have a dependency on the *.bin files, since they are passed in behind the scenes via incbin
         set_source_files_properties("${PROJECT_BINARY_DIR}/generated/snapshots/${basename}.asm" PROPERTIES OBJECT_DEPENDS "${SNAPSHOT_BASE_PATH}/${basename}.bin")
         list(APPEND STARTUP_SNAPSHOTS_ASM_SRCS "${PROJECT_BINARY_DIR}/generated/snapshots/${basename}.asm")
@@ -94,8 +94,9 @@ endfunction(add_headers_sources)
 
 list(APPEND SRCS main.cpp)
 add_headers_sources(
-    v8 isolatewrapper utils global reporting hash
-    module/basicmodule module/nativemodule module/module module/moduleresolver module/native/modules
+    v8/v8 v8/isolatewrapper
+    utils/utils utils/reporting utils/hash
+    module/basicmodule module/nativemodule module/module module/moduleresolver module/global module/native/modules
     ast/ast ast/parse ast/import ast/location ast/walk
     graph/graph graph/graphbuilder graph/dot graph/type graph/basicblock
     transform/blank transform/flow

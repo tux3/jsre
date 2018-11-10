@@ -1,5 +1,5 @@
 #include "basicmodule.hpp"
-#include "isolatewrapper.hpp"
+#include "v8/isolatewrapper.hpp"
 
 using namespace v8;
 
