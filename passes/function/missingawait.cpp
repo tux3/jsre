@@ -1,4 +1,3 @@
-#include "missingawait.hpp"
 #include "module/module.hpp"
 #include "reporting.hpp"
 #include "ast/ast.hpp"
