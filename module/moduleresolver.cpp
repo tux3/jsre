@@ -54,7 +54,7 @@ bool ModuleResolver::isProjectModule(fs::path projectDir, fs::path filePath)
             && relative.string().find("node_modules") == string::npos;
 }
 
-bool ModuleResolver::isProjectModule(filesystem::__cxx11::path projectDir, filesystem::__cxx11::path basePath, string requestedName)
+bool ModuleResolver::isProjectModule(fs::path projectDir, fs::path basePath, string requestedName)
 {
     fs::path fullPath = resolve(basePath, requestedName);
     if (fullPath.empty()) {
