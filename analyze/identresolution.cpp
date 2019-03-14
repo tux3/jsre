@@ -152,6 +152,7 @@ static void findScopeDeclarations(vector<Scope>& scopes, AstNode& scopeNode)
         // FunctionExpressions don't belong in a parent scope, their name is in their own scope
         if (auto id = ((FunctionExpression&)scopeNode).getId(); id)
             addDeclaration(scopes, *id);
+    [[fallthrough]];
     case AstNodeType::FunctionDeclaration:
     case AstNodeType::ArrowFunctionExpression:
     case AstNodeType::ObjectMethod:
@@ -254,8 +255,8 @@ IdentifierResolutionResult resolveModuleIdentifiers(v8::Local<v8::Context> conte
             Identifier& identifier = reinterpret_cast<Identifier&>(node);
             const auto& name = identifier.getName();
             bool found = false;
-            for (ssize_t i = scopeDeclarations.size()-1; i>=0; --i) {
-                const auto& scope = scopeDeclarations[i];
+            for (ssize_t i = (ssize_t)scopeDeclarations.size()-1; i>=0; --i) {
+                const auto& scope = scopeDeclarations[(size_t)i];
                 // Search for all possible shadowing var declarations first, then nornal let/const
                 for (int varIndex = scope.readCurrentVarDeclaration; varIndex>0; --varIndex) {
                     auto prefixedName = to_string(varIndex)+name;
