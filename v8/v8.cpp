@@ -10,7 +10,7 @@ extern const char v8_startup_snapshot_blob_end;
 }
 
 V8::V8()
-    : platform(v8::platform::CreateDefaultPlatform())
+    : platform(v8::platform::NewDefaultPlatform())
 {
     std::string flags = "--harmony_dynamic_import --harmony_class_fields";
     v8::V8::SetFlagsFromString(flags.c_str(), flags.length());

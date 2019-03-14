@@ -114,7 +114,7 @@ static v8::Local<v8::Object> makeBabelObject(IsolateWrapper& isolateWrapper)
     ScriptCompiler::Source source(babelSourceStr, cachedData);
     Local<UnboundScript> unboundScript;
 
-    auto compileFlags = cachedData ? ScriptCompiler::kConsumeCodeCache : ScriptCompiler::kProduceFullCodeCache;
+    auto compileFlags = cachedData ? ScriptCompiler::kConsumeCodeCache : ScriptCompiler::kEagerCompile;
     if (!ScriptCompiler::CompileUnboundScript(isolate, &source, compileFlags).ToLocal(&unboundScript)) {
         reportV8Exception(isolate, &trycatch);
         throw std::runtime_error("makeBabelObject: Error compiling babel script");

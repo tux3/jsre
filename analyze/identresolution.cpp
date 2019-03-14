@@ -319,7 +319,7 @@ IdentifierResolutionResult resolveModuleIdentifiers(v8::Local<v8::Context> conte
         auto name = elem.first;
         Local<String> nameStr = String::NewFromUtf8(isolate, name.c_str());
 
-        if (global->Has(nameStr))
+        if (global->Has(context, nameStr).FromJust())
             continue;
 
         missingGlobalIdentifiers.push_back(std::move(name));
@@ -353,7 +353,7 @@ void defineMissingGlobalIdentifiers(v8::Local<v8::Context> context, const std::v
 
     for (auto name : missingGlobalIdentifiers) {
         Local<String> nameStr = String::NewFromUtf8(isolate, name.c_str());
-        if (!global->Has(nameStr))
+        if (!global->Has(context, nameStr).FromJust())
             global->Set(nameStr, poserObject);
     }
 }
