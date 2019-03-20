@@ -171,41 +171,48 @@ ClassTypeInfo *ClassTypeInfo::ensureLazyInit()
     for (auto node : staticDefinition->getBody()->getBody()) {
         if (node->getType() == AstNodeType::ClassMethod) {
             auto method = (ClassMethod*)node;
-            if (method->getKind() == ClassMethod::Kind::Method || method->getKind() == ClassMethod::Kind::Constructor) {
-                properties[method->getKey()->getName()] = TypeInfo::makeFunction((Function&)*node);
-            } else if (method->getKind() == ClassMethod::Kind::Get) {
-                auto getterType = TypeInfo::makeFunction((Function&)*node);
-                properties[method->getKey()->getName()] = getterType.getExtra<FunctionTypeInfo>()->returnType;
-            } else if (method->getKind() == ClassMethod::Kind::Set) {
-                auto setterType = TypeInfo::makeFunction((Function&)*node);
-                assert(setterType.getExtra<FunctionTypeInfo>()->argumentTypes.size() == 1);
-                properties[method->getKey()->getName()] = setterType.getExtra<FunctionTypeInfo>()->argumentTypes[0];
-            } else {
-                assert(false);
+            if (!method->isComputed()) {
+                auto keyName = ((Identifier*)method->getKey())->getName();
+                if (method->getKind() == ClassMethod::Kind::Method || method->getKind() == ClassMethod::Kind::Constructor) {
+                    properties[keyName] = TypeInfo::makeFunction((Function&)*node);
+                } else if (method->getKind() == ClassMethod::Kind::Get) {
+                    auto getterType = TypeInfo::makeFunction((Function&)*node);
+                    properties[keyName] = getterType.getExtra<FunctionTypeInfo>()->returnType;
+                } else if (method->getKind() == ClassMethod::Kind::Set) {
+                    auto setterType = TypeInfo::makeFunction((Function&)*node);
+                    assert(setterType.getExtra<FunctionTypeInfo>()->argumentTypes.size() == 1);
+                    properties[keyName] = setterType.getExtra<FunctionTypeInfo>()->argumentTypes[0];
+                } else {
+                    assert(false);
+                }
             }
         } else if (node->getType() == AstNodeType::ClassPrivateMethod) {
             auto method = (ClassPrivateMethod*)node;
+            auto keyName = ((Identifier*)method->getKey())->getName(); // Private method keys can't be computed
             if (method->getKind() == ClassPrivateMethod::Kind::Method) {
-                properties[method->getKey()->getName()] = TypeInfo::makeFunction((Function&)*node);
+                properties[keyName] = TypeInfo::makeFunction((Function&)*node);
             } else if (method->getKind() == ClassPrivateMethod::Kind::Get) {
                 auto getterType = TypeInfo::makeFunction((Function&)*node);
-                properties[method->getKey()->getName()] = getterType.getExtra<FunctionTypeInfo>()->returnType;
+                properties[keyName] = getterType.getExtra<FunctionTypeInfo>()->returnType;
             } else if (method->getKind() == ClassPrivateMethod::Kind::Set) {
                 auto setterType = TypeInfo::makeFunction((Function&)*node);
                 assert(setterType.getExtra<FunctionTypeInfo>()->argumentTypes.size() == 1);
-                properties[method->getKey()->getName()] = setterType.getExtra<FunctionTypeInfo>()->argumentTypes[0];
+                properties[keyName] = setterType.getExtra<FunctionTypeInfo>()->argumentTypes[0];
             } else {
                 assert(false);
             }
-        } else if (node->getType() == AstNodeType::ClassProperty) {
-            auto prop = (ClassProperty*)node;
-            auto val = (AstNode*)prop->getValue();
-            TypeInfo type;
-            if (auto astType = prop->getTypeAnnotation())
-                type = resolveAstNodeType(*astType);
-            else if (val)
-                type = resolveAstNodeType(*val);
-            properties[prop->getKey()->getName()] = type;
+        } else if (node->getType() == AstNodeType::ClassProperty || node->getType() == AstNodeType::ClassPrivateProperty) {
+            auto prop = (ClassBaseProperty*)node;
+            if (!prop->isComputed()) {
+                auto keyName = ((Identifier*)prop->getKey())->getName();
+                auto val = (AstNode*)prop->getValue();
+                TypeInfo type;
+                if (auto astType = prop->getTypeAnnotation())
+                    type = resolveAstNodeType(*astType);
+                else if (val)
+                    type = resolveAstNodeType(*val);
+                properties[keyName] = type;
+            }
         }
     }
 

@@ -11,6 +11,6 @@ void startParsingThreads();
 void stopParsingThreads();
 
 // This runs babel and imports its result in a worker thread, returning the AST
-std::future<AstRoot*> parseSourceScriptAsync(Module& parentModule, const std::string& script);
+std::future<AstRoot*> parseSourceScriptAsync(Module& parentModule, const std::string& script, bool keepComments = false);
 
 #endif // PARSE_H

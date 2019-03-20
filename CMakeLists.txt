@@ -20,6 +20,9 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
 ## Babel transpiler lib
 add_subdirectory(babel)
 
+## Tests
+include(test/CMakeLists.txt)
+
 ## Function and module passes lib
 include(passes/CMakeLists.txt)
 
@@ -92,10 +95,10 @@ function(add_headers_sources basename_list)
     set(SRCS "${SRCS}" PARENT_SCOPE)
 endfunction(add_headers_sources)
 
-list(APPEND SRCS main.cpp)
+list(APPEND SRCS)
 add_headers_sources(
     v8/v8 v8/isolatewrapper
-    utils/utils utils/reporting utils/hash
+    utils/utils utils/reporting utils/hash utils/trim
     module/basicmodule module/nativemodule module/module module/moduleresolver module/global module/native/modules
     ast/ast ast/parse ast/import ast/location ast/walk
     graph/graph graph/graphbuilder graph/dot graph/type graph/basicblock
@@ -109,8 +112,11 @@ find_library(ICUI18N_LIB NAMES icui18n)
 
 set(V8_STATIC_LIBS "v8_base" "v8_external_snapshot" "v8_libplatform" "v8_libbase" "v8_libsampler")
 
-add_executable(${PROJECT_NAME} ${SRCS})
-target_include_directories(${PROJECT_NAME} PRIVATE ${V8_INCLUDE_DIR} ${PROJECT_SOURCE_DIR} ${PROJECT_BINARY_DIR}/generated)
-target_link_libraries(${PROJECT_NAME} PRIVATE ${PROJECT_NAME}_passes pthread sodium babel native_modules_js startup_snapshots -L${V8_STATIC_LIBS_DIR} ${V8_STATIC_LIBS} ${ICUUC_LIB} ${ICUI18N_LIB} "stdc++fs")
-set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD 17
-                                                 CXX_STANDARD_REQUIRED 1)
+add_library("${PROJECT_NAME}_lib" STATIC ${SRCS})
+target_include_directories("${PROJECT_NAME}_lib" PUBLIC ${V8_INCLUDE_DIR} ${PROJECT_SOURCE_DIR} ${PROJECT_BINARY_DIR}/generated)
+target_link_libraries("${PROJECT_NAME}_lib" PUBLIC ${PROJECT_NAME}_passes pthread sodium babel native_modules_js startup_snapshots -L${V8_STATIC_LIBS_DIR} ${V8_STATIC_LIBS} ${ICUUC_LIB} ${ICUI18N_LIB} "stdc++fs")
+set_target_properties("${PROJECT_NAME}_lib" PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED 1)
+
+add_executable(${PROJECT_NAME} main.cpp)
+target_link_libraries(${PROJECT_NAME} "${PROJECT_NAME}_lib")
+set_target_properties("${PROJECT_NAME}" PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED 1)

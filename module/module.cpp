@@ -82,8 +82,9 @@ void Module::resolveLocalIdentifiers()
     Local<v8::Module> module = getExecutableModule();
 
     IdentifierResolutionResult result = resolveModuleIdentifiers(context, getAst());
-    resolvedLocalIdentifiers = result.resolvedIdentifiers;
-    missingContextIdentifiers = result.missingGlobalIdentifiers;
+    resolvedLocalIdentifiers = move(result.resolvedIdentifiers);
+    missingContextIdentifiers = move(result.missingGlobalIdentifiers);
+    scopeChain = move(result.scopeChain);
 
     // Any missing identifier in one of our imports is also considered missing in our module,
     // because imports are evaluated by v8 in the current module's context,
@@ -104,7 +105,7 @@ void Module::resolveLocalXRefs()
         return;
     localXRefsDone = true;
 
-    for (auto idToDecl : resolvedLocalIdentifiers) {
+    for (auto idToDecl : getResolvedLocalIdentifiers()) {
         auto& usages = localXRefs[idToDecl.second];
         usages.push_back(idToDecl.first);
     }
@@ -279,6 +280,12 @@ const std::unordered_map<Identifier *, Identifier *>& Module::getResolvedLocalId
 {
     resolveLocalIdentifiers();
     return resolvedLocalIdentifiers;
+}
+
+const LexicalBindings& Module::getScopeChain()
+{
+    resolveLocalIdentifiers();
+    return *scopeChain;
 }
 
 void Module::evaluate()

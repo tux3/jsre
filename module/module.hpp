@@ -14,6 +14,7 @@ class AstRoot;
 class Identifier;
 class ImportSpecifier;
 class Function;
+struct LexicalBindings;
 
 class Module final : public BasicModule {
 public:
@@ -32,6 +33,7 @@ public:
 
     const std::unordered_map<Identifier*, std::vector<Identifier*>>& getLocalXRefs();
     const std::unordered_map<Identifier*, Identifier*>& getResolvedLocalIdentifiers();
+    const LexicalBindings& getScopeChain();
 
     enum class EmbedderDataIndex : int {
         Reserved = 0, // Has a special meaning for the Chrome Debugger, or so I'm told
@@ -63,6 +65,7 @@ private:
     std::unordered_map<Identifier*, Identifier*> resolvedLocalIdentifiers; //< Maps identifiers to their local declaration
     std::unordered_map<ImportSpecifier*, Identifier*> resolvedImportedIdentifiers; //< Maps named imports to their declaration in the imported module
     std::unordered_map<Identifier*, std::vector<Identifier*>> localXRefs; //< Maps local declarations to their previously resolved uses
+    std::unique_ptr<LexicalBindings> scopeChain; //< The scope chain maps bound names to their declaration in each lexical scope
     bool localIdentifierResolutionDone = false; //< True after we've run the identifiers resolution pass
     bool importedIdentifierResolutionDone = false; //< True after we're run the imported identifiers resolution pass
     bool localXRefsDone = false;

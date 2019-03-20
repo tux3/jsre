@@ -25,6 +25,7 @@ struct ParseWorkPackage
     Module& module;
     const std::string& source;
     promise<AstRoot*> astPromise;
+    bool keepComments;
 };
 
 static const char babelCompileCacheFileName[] = "babel_compile_cache.bin";
@@ -70,7 +71,7 @@ static void worker_thread_loop()
         Context::Scope contextScope(context);
 
         auto astObj = parseSourceScript(isolateWrapper, babelObj, package.source);
-        auto ast = importBabylonAst(package.module, astObj);
+        auto ast = importBabylonAst(package.module, astObj, package.keepComments);
         package.astPromise.set_value(ast);
 
         condvar_lock.lock();
@@ -79,7 +80,7 @@ static void worker_thread_loop()
     workersStarted--;
 }
 
-std::future<AstRoot*> parseSourceScriptAsync(Module &parentModule, const std::string& script)
+std::future<AstRoot*> parseSourceScriptAsync(Module &parentModule, const std::string& script, bool keepComments)
 {
     assert(workersStopFlag.load(memory_order::memory_order_acquire) == false);
     lock_guard condvar_lock(condvar_mutex);
@@ -87,7 +88,7 @@ std::future<AstRoot*> parseSourceScriptAsync(Module &parentModule, const std::st
     promise<AstRoot*> promise;
     future<AstRoot*> future = promise.get_future();
 
-    ParseWorkPackage package{parentModule, script, move(promise)};
+    ParseWorkPackage package{parentModule, script, move(promise), keepComments};
     workQueue.push_back(move(package));
     condvar.notify_one();
 
@@ -213,8 +214,6 @@ static void prepareOtherThreads()
 {
     loadBabelCompileCacheFile();
 
-    workersStopFlag.store(false, memory_order::memory_order_release);
-
     {
         lock_guard condvar_lock(condvar_mutex);
         auto count = workersCount();
@@ -228,6 +227,7 @@ static void prepareOtherThreads()
 void startParsingThreads()
 {
     lock_guard condvar_lock(condvar_mutex); // Taken for concurrent push into workers vector
+    workersStopFlag.store(false, memory_order::memory_order_release);
     workers.emplace_back(prepareOtherThreads);
 }
 

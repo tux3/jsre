@@ -27,16 +27,13 @@ bool isExternalIdentifier(Identifier& node)
 bool isUnscopedPropertyOrMethodIdentifier(Identifier& node)
 {
     auto parent = node.getParent();
-    if (parent->getType() == AstNodeType::ObjectProperty)
+    auto parentType = parent->getType();
+    if (parentType == AstNodeType::ObjectProperty)
         return ((ObjectProperty*)parent)->getKey() == &node;
-    else if (parent->getType() == AstNodeType::ClassProperty)
-        return ((ClassProperty*)parent)->getKey() == &node;
-    else if (parent->getType() == AstNodeType::ClassPrivateProperty)
-        return ((ClassProperty*)parent)->getKey() == &node;
-    else if (parent->getType() == AstNodeType::ClassMethod)
-        return ((ClassMethod*)parent)->getKey() == &node;
-    else if (parent->getType() == AstNodeType::ClassPrivateMethod)
-        return ((ClassMethod*)parent)->getKey() == &node;
+    else if (parentType == AstNodeType::ClassProperty || parentType == AstNodeType::ClassPrivateProperty)
+        return ((ClassBaseProperty*)parent)->getKey() == &node;
+    else if (parentType == AstNodeType::ClassMethod || parentType == AstNodeType::ClassPrivateMethod)
+        return ((ClassBaseMethod*)parent)->getKey() == &node;
     else
         return false;
 }

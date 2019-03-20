@@ -89,11 +89,11 @@ int main(int argc, char* argv[])
     for (Module* module : modulesToAnalyze)
         module->analyze();
 
-    // Cleanup
-    stopParsingThreads();
-
     const auto& report = getReportingStatistics();
     cout << "Found " << report.errors << " error(s), " << report.warnings << " warning(s) and " << report.suggestions << " suggestion(s)." << endl;
+
+    // Cleanup
+    stopParsingThreads();
 
     return EXIT_SUCCESS;
 }

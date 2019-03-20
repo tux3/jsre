@@ -5,6 +5,8 @@
 #include <v8.h>
 
 #define IMPORTED_NODE_LIST(X)       \
+    X(CommentLine)                  \
+    X(CommentBlock)                 \
     X(Identifier)                   \
     X(RegExpLiteral)                \
     X(NullLiteral)                  \
@@ -127,7 +129,7 @@ class AstRoot;
 class AstNode;
 class Module;
 
-AstRoot* importBabylonAst(Module& parentModule, v8::Local<v8::Object> astObj);
+AstRoot* importBabylonAst(Module& parentModule, v8::Local<v8::Object> astObj, bool keepComments);
 AstNode* importNode(const v8::Local<v8::Object>& node);
 AstNode* importChildOrNullptr(const v8::Local<v8::Object>& node, const char* name);
 AstSourceSpan importLocation(const v8::Local<v8::Object>& node);

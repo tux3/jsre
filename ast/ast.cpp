@@ -72,16 +72,41 @@ string AstNode::getSourceString()
     return string(beg_ptr, end_ptr - beg_ptr);
 }
 
-AstRoot::AstRoot(AstSourceSpan location, Module &parentModule, vector<AstNode*> body)
+AstComment::AstComment(AstSourceSpan location, AstComment::Type type, string text)
+    : AstNode(location, type == Type::Line ? AstNodeType::CommentLine : AstNodeType::CommentBlock)
+    , text{text},
+      location{location},
+      type{type}
+{
+}
+
+string AstComment::getText() const
+{
+    return text;
+}
+
+AstComment::Type AstComment::getType() const
+{
+    return type;
+}
+
+AstRoot::AstRoot(AstSourceSpan location, Module &parentModule, vector<AstNode*> body, std::vector<AstComment*> comments)
     : AstNode(location, AstNodeType::Root)
     , parentModule{ parentModule }
     , body{ move(body) }
+    , comments{ move(comments) }
 {
     setParentOfChildren();
 }
 
-const std::vector<AstNode*>& AstRoot::getBody() {
+const std::vector<AstNode*>& AstRoot::getBody()
+{
     return body;
+}
+
+const std::vector<AstComment*> &AstRoot::getComments()
+{
+    return comments;
 }
 
 Module &AstRoot::getParentModule() const
@@ -242,9 +267,19 @@ ObjectMethod::ObjectMethod(AstSourceSpan location, AstNode* id, vector<AstNode*>
     : Function(location, AstNodeType::ObjectMethod, id, move(params), body, typeParameters, returnType, isGenerator, isAsync)
     , key{ key }
     , kind{ kind }
-    , isComputed{ isComputed }
+    , computed{ isComputed }
 {
     setParentOfChildren();
+}
+
+AstNode *ObjectMethod::getKey()
+{
+    return key;
+}
+
+bool ObjectMethod::isComputed()
+{
+    return computed;
 }
 
 ExpressionStatement::ExpressionStatement(AstSourceSpan location, AstNode* expression)
@@ -490,9 +525,9 @@ ForStatement::ForStatement(AstSourceSpan location, AstNode* init, AstNode* test,
     setParentOfChildren();
 }
 
-VariableDeclaration* ForStatement::getInit()
+AstNode* ForStatement::getInit()
 {
-    return reinterpret_cast<VariableDeclaration*>(init);
+    return init;
 }
 
 AstNode *ForStatement::getTest()
@@ -592,6 +627,11 @@ AstNode *Function::getReturnTypeAnnotation()
     if (TypeAnnotation* returnType = getReturnType())
         return returnType->getTypeAnnotation();
     return nullptr;
+}
+
+TypeParameterDeclaration *Function::getTypeParameters()
+{
+    return typeParameters;
 }
 
 Identifier* Function::getId()
@@ -956,21 +996,38 @@ const std::vector<AstNode *> &ClassBody::getBody()
     return body;
 }
 
+ClassBaseMethod::ClassBaseMethod(AstNodeType type, AstSourceSpan location, AstNode *id, std::vector<AstNode *> params,
+                                 AstNode *body, AstNode *key, TypeParameterDeclaration *typeParameters, TypeAnnotation *returnType,
+                                 bool isGenerator, bool isAsync, bool isComputed, bool isStatic)
+    : Function(location, type, id, move(params), body, typeParameters, returnType, isGenerator, isAsync)
+    , key{ key }
+    , computed{ isComputed }
+    , staticMethod{ isStatic }
+{
+}
+
+AstNode *ClassBaseMethod::getKey()
+{
+    return key;
+}
+
+bool ClassBaseMethod::isComputed()
+{
+    return computed;
+}
+
+bool ClassBaseMethod::isStatic()
+{
+    return staticMethod;
+}
+
 ClassMethod::ClassMethod(AstSourceSpan location, AstNode* id, std::vector<AstNode*> params, AstNode* body, AstNode* key,
                          TypeParameterDeclaration* typeParameters, TypeAnnotation* returnType,
                          ClassMethod::Kind kind, bool isGenerator, bool isAsync, bool isComputed, bool isStatic)
-    : Function(location, AstNodeType::ClassMethod, id, move(params), body, typeParameters, returnType, isGenerator, isAsync)
-    , key{ key }
+    : ClassBaseMethod(AstNodeType::ClassMethod, location, id, move(params), body, key, typeParameters, returnType, isGenerator, isAsync, isComputed, isStatic)
     , kind{ kind }
-    , isComputed{ isComputed }
-    , isStatic{ isStatic }
 {
     setParentOfChildren();
-}
-
-Identifier *ClassMethod::getKey()
-{
-    return reinterpret_cast<Identifier*>(key);
 }
 
 ClassMethod::Kind ClassMethod::getKind()
@@ -981,17 +1038,10 @@ ClassMethod::Kind ClassMethod::getKind()
 ClassPrivateMethod::ClassPrivateMethod(AstSourceSpan location, AstNode* id, std::vector<AstNode*> params, AstNode* body, AstNode* key,
                                        TypeParameterDeclaration* typeParameters, TypeAnnotation* returnType,
                                        ClassPrivateMethod::Kind kind, bool isGenerator, bool isAsync, bool isStatic)
-    : Function(location, AstNodeType::ClassPrivateMethod, id, move(params), body, typeParameters, returnType, isGenerator, isAsync)
-    , key{ key }
+    : ClassBaseMethod(AstNodeType::ClassPrivateMethod, location, id, move(params), body, key, typeParameters, returnType, isGenerator, isAsync, false, isStatic)
     , kind{ kind }
-    , isStatic{ isStatic }
 {
     setParentOfChildren();
-}
-
-Identifier* ClassPrivateMethod::getKey()
-{
-    return reinterpret_cast<Identifier*>(key);
 }
 
 ClassPrivateMethod::Kind ClassPrivateMethod::getKind()
@@ -999,52 +1049,54 @@ ClassPrivateMethod::Kind ClassPrivateMethod::getKind()
     return kind;
 }
 
-ClassProperty::ClassProperty(AstSourceSpan location, AstNode* key, AstNode* value,
-                             TypeAnnotation* typeAnnotation, bool isStatic, bool isComputed)
-    : AstNode(location, AstNodeType::ClassProperty)
+ClassBaseProperty::ClassBaseProperty(AstNodeType type, AstSourceSpan location, AstNode *key, AstNode *value,
+                                     TypeAnnotation *typeAnnotation, bool isStatic, bool isComputed)
+    : AstNode(location, type)
     , key{ key }
     , value{ value }
     , typeAnnotation{ typeAnnotation }
-    , isStatic{ isStatic }
-    , isComputed{ isComputed }
+    , staticProp{ isStatic }
+    , computed{ isComputed }
 {
-    setParentOfChildren();
 }
 
-Identifier* ClassProperty::getKey()
+bool ClassBaseProperty::isStatic()
 {
-    return reinterpret_cast<Identifier*>(key);
+    return staticProp;
 }
 
-AstNode *ClassProperty::getValue()
+bool ClassBaseProperty::isComputed()
+{
+    return computed;
+}
+
+AstNode* ClassBaseProperty::getKey()
+{
+    return key;
+}
+
+AstNode *ClassBaseProperty::getValue()
 {
     return value;
 }
 
-TypeAnnotation *ClassProperty::getTypeAnnotation()
+TypeAnnotation *ClassBaseProperty::getTypeAnnotation()
 {
     return typeAnnotation;
 }
 
-ClassPrivateProperty::ClassPrivateProperty(AstSourceSpan location, AstNode* key, AstNode* value,
-                                           TypeAnnotation* typeAnnotation, bool isStatic)
-    : AstNode(location, AstNodeType::ClassPrivateProperty)
-    , key{ key }
-    , value{ value }
-    , typeAnnotation{ typeAnnotation }
-    , isStatic{ isStatic }
+ClassProperty::ClassProperty(AstSourceSpan location, AstNode* key, AstNode* value,
+                             TypeAnnotation* typeAnnotation, bool isStatic, bool isComputed)
+    : ClassBaseProperty{AstNodeType::ClassProperty, location, key, value, typeAnnotation, isStatic, isComputed}
 {
     setParentOfChildren();
 }
 
-Identifier* ClassPrivateProperty::getKey()
+ClassPrivateProperty::ClassPrivateProperty(AstSourceSpan location, AstNode* key, AstNode* value,
+                                           TypeAnnotation* typeAnnotation, bool isStatic)
+    : ClassBaseProperty{AstNodeType::ClassPrivateProperty, location, key, value, typeAnnotation, isStatic, false}
 {
-    return reinterpret_cast<Identifier*>(key);
-}
-
-AstNode *ClassPrivateProperty::getValue()
-{
-    return value;
+    setParentOfChildren();
 }
 
 ClassDeclaration::ClassDeclaration(AstSourceSpan location, AstNode* id, AstNode* superClass, AstNode* body,
@@ -1199,21 +1251,31 @@ const std::vector<AstNode*>& ImportDeclaration::getSpecifiers()
     return specifiers;
 }
 
-ImportSpecifier::ImportSpecifier(AstSourceSpan location, AstNode* local, AstNode* imported, bool typeImport)
-    : AstNode(location, AstNodeType::ImportSpecifier)
+ImportBaseSpecifier::ImportBaseSpecifier(AstNodeType type, AstSourceSpan location, AstNode* local, bool typeImport)
+    : AstNode(location, type)
     , local{ (Identifier*)local }
-    , imported{ (Identifier*)imported }
-    , localEqualsImported{ this->local->getName() == this->imported->getName() }
     , typeImport{ typeImport }
 {
     assert(local->getType() == AstNodeType::Identifier);
-    assert(imported->getType() == AstNodeType::Identifier);
-    setParentOfChildren();
 }
 
-Identifier* ImportSpecifier::getLocal()
+Identifier *ImportBaseSpecifier::getLocal()
 {
-    return reinterpret_cast<Identifier*>(local);
+    return local;
+}
+
+bool ImportBaseSpecifier::isTypeImport()
+{
+    return typeImport;
+}
+
+ImportSpecifier::ImportSpecifier(AstSourceSpan location, AstNode* local, AstNode* imported, bool typeImport)
+    : ImportBaseSpecifier(AstNodeType::ImportSpecifier, location, local, typeImport)
+    , imported{ (Identifier*)imported }
+    , localEqualsImported{ this->local->getName() == this->imported->getName() }
+{
+    assert(imported->getType() == AstNodeType::Identifier);
+    setParentOfChildren();
 }
 
 Identifier *ImportSpecifier::getImported()
@@ -1221,33 +1283,16 @@ Identifier *ImportSpecifier::getImported()
     return reinterpret_cast<Identifier*>(imported);
 }
 
-bool ImportSpecifier::isTypeImport()
-{
-    return typeImport;
-}
-
 ImportDefaultSpecifier::ImportDefaultSpecifier(AstSourceSpan location, AstNode* local)
-    : AstNode(location, AstNodeType::ImportDefaultSpecifier)
-    , local{ local }
+    : ImportBaseSpecifier(AstNodeType::ImportDefaultSpecifier, location, local, false)
 {
     setParentOfChildren();
-}
-
-Identifier* ImportDefaultSpecifier::getLocal()
-{
-    return reinterpret_cast<Identifier*>(local);
 }
 
 ImportNamespaceSpecifier::ImportNamespaceSpecifier(AstSourceSpan location, AstNode* local)
-    : AstNode(location, AstNodeType::ImportNamespaceSpecifier)
-    , local{ local }
+    : ImportBaseSpecifier(AstNodeType::ImportNamespaceSpecifier, location, local, false)
 {
     setParentOfChildren();
-}
-
-Identifier* ImportNamespaceSpecifier::getLocal()
-{
-    return reinterpret_cast<Identifier*>(local);
 }
 
 ExportNamedDeclaration::ExportNamedDeclaration(AstSourceSpan location, AstNode* declaration, AstNode* source, std::vector<AstNode*> specifiers, Kind kind)

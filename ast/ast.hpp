@@ -43,16 +43,35 @@ private:
     AstNodeType type;
 };
 
+class AstComment : public AstNode {
+public:
+    enum class Type {
+        Block,
+        Line
+    };
+
+    AstComment(AstSourceSpan location, Type type, std::string text);
+    std::string getText() const;
+    Type getType() const;
+
+private:
+    std::string text;
+    AstSourceSpan location;
+    Type type;
+};
+
 class AstRoot : public AstNode {
 public:
-    AstRoot(AstSourceSpan location, Module& parentModule, std::vector<AstNode*> body = {});
+    AstRoot(AstSourceSpan location, Module& parentModule, std::vector<AstNode*> body = {}, std::vector<AstComment*> comments = {});
     const std::vector<AstNode*>& getBody();
+    const std::vector<AstComment*>& getComments();
     Module& getParentModule() const;
     virtual void applyChildren(const std::function<bool (AstNode*)>&) override;
 
 private:
     Module& parentModule;
     std::vector<AstNode*> body;
+    std::vector<AstComment*> comments;
 };
 
 class Identifier : public AstNode {
@@ -315,6 +334,7 @@ public:
     AstNode* getBody();
     TypeAnnotation* getReturnType();
     AstNode* getReturnTypeAnnotation();
+    TypeParameterDeclaration* getTypeParameters();
     const std::vector<AstNode*>& getParams();
     bool isGenerator();
     bool isAsync();
@@ -358,12 +378,14 @@ public:
 
     ObjectMethod(AstSourceSpan location, AstNode* id, std::vector<AstNode*> params, AstNode* body, TypeParameterDeclaration* typeParameters,
                  TypeAnnotation* returnType, AstNode* key, Kind kind, bool isGenerator, bool isAsync, bool isComputed);
+    AstNode* getKey();
+    bool isComputed();
     virtual void applyChildren(const std::function<bool (AstNode*)>&) override;
 
 private:
     AstNode* key;
     Kind kind;
-    bool isComputed;
+    bool computed;
 };
 
 class Super : public AstNode {
@@ -675,34 +697,54 @@ private:
     std::vector<AstNode*> body;
 };
 
-class ClassProperty : public AstNode {
+class ClassBaseProperty : public AstNode {
 public:
-    ClassProperty(AstSourceSpan location, AstNode* key, AstNode* value, TypeAnnotation* typeAnnotation, bool isStatic, bool isComputed);
-    Identifier* getKey();
+    AstNode* getKey();
     AstNode* getValue();
     TypeAnnotation* getTypeAnnotation();
-    virtual void applyChildren(const std::function<bool (AstNode*)>&) override;
+    bool isStatic();
+    bool isComputed();
+    virtual void applyChildren(const std::function<bool (AstNode*)>&) = 0;
 
-private:
+protected:
+    ClassBaseProperty(AstNodeType type, AstSourceSpan location, AstNode* key, AstNode* value, TypeAnnotation* typeAnnotation, bool isStatic, bool isComputed);
+
+protected:
     AstNode *key, *value;
     TypeAnnotation* typeAnnotation;
-    bool isStatic, isComputed;
+    bool staticProp, computed;
 };
 
-class ClassPrivateProperty : public AstNode {
+class ClassProperty : public ClassBaseProperty {
+public:
+    ClassProperty(AstSourceSpan location, AstNode* key, AstNode* value, TypeAnnotation* typeAnnotation, bool isStatic, bool isComputed);
+    virtual void applyChildren(const std::function<bool (AstNode*)>&) override;
+};
+
+class ClassPrivateProperty : public ClassBaseProperty {
 public:
     ClassPrivateProperty(AstSourceSpan location, AstNode* key, AstNode* value, TypeAnnotation* typeAnnotation, bool isStatic);
-    Identifier* getKey();
-    AstNode* getValue();
     virtual void applyChildren(const std::function<bool (AstNode*)>&) override;
-
-private:
-    AstNode *key, *value;
-    TypeAnnotation* typeAnnotation;
-    bool isStatic;
 };
 
-class ClassMethod : public Function {
+class ClassBaseMethod : public Function {
+public:
+    AstNode* getKey();
+    bool isComputed();
+    bool isStatic();
+    virtual void applyChildren(const std::function<bool (AstNode*)>&) = 0;
+
+protected:
+    ClassBaseMethod(AstNodeType type, AstSourceSpan location, AstNode* id, std::vector<AstNode*> params, AstNode* body, AstNode* key,
+                    TypeParameterDeclaration* typeParameters, TypeAnnotation* returnType,
+                    bool isGenerator, bool isAsync, bool isComputed, bool isStatic);
+
+protected:
+    AstNode *key;
+    bool computed, staticMethod;
+};
+
+class ClassMethod : public ClassBaseMethod {
 public:
     enum class Kind {
         Constructor,
@@ -714,17 +756,14 @@ public:
     ClassMethod(AstSourceSpan location, AstNode* id, std::vector<AstNode*> params, AstNode* body, AstNode* key,
                 TypeParameterDeclaration* typeParameters, TypeAnnotation* returnType,
                 Kind kind, bool isGenerator, bool isAsync, bool isComputed, bool isStatic);
-    Identifier* getKey();
     Kind getKind();
     virtual void applyChildren(const std::function<bool (AstNode*)>&) override;
 
 private:
-    AstNode* key;
     Kind kind;
-    bool isComputed, isStatic;
 };
 
-class ClassPrivateMethod : public Function {
+class ClassPrivateMethod : public ClassBaseMethod {
 public:
     enum class Kind {
         Method,
@@ -735,14 +774,11 @@ public:
     ClassPrivateMethod(AstSourceSpan location, AstNode* id, std::vector<AstNode*> params, AstNode* body, AstNode* key,
                        TypeParameterDeclaration* typeParameters, TypeAnnotation* returnType,
                        Kind kind, bool isGenerator, bool isAsync, bool isStatic);
-    Identifier* getKey();
     Kind getKind();
     virtual void applyChildren(const std::function<bool (AstNode*)>&) override;
 
 private:
-    AstNode* key;
     Kind kind;
-    bool isStatic;
 };
 
 class FunctionDeclaration : public Function {
@@ -782,7 +818,7 @@ private:
 class ForStatement : public AstNode {
 public:
     ForStatement(AstSourceSpan location, AstNode* init, AstNode* test, AstNode* update, AstNode* body);
-    VariableDeclaration* getInit();
+    AstNode *getInit();
     AstNode* getTest();
     AstNode* getUpdate();
     AstNode* getBody();
@@ -901,38 +937,39 @@ private:
     Kind kind;
 };
 
-class ImportSpecifier : public AstNode {
+class ImportBaseSpecifier : public AstNode {
 public:
-    ImportSpecifier(AstSourceSpan location, AstNode* local, AstNode* imported, bool typeImport);
+    ImportBaseSpecifier(AstNodeType type, AstSourceSpan location, AstNode* local, bool typeImport);
     Identifier* getLocal();
-    Identifier* getImported();
     bool isTypeImport();
-    virtual void applyChildren(const std::function<bool (AstNode*)>&) override;
+    virtual void applyChildren(const std::function<bool (AstNode*)>&) = 0;
 
-private:
-    Identifier *local, *imported;
-    bool localEqualsImported;
+protected:
+    Identifier *local;
     bool typeImport;
 };
 
-class ImportDefaultSpecifier : public AstNode {
+class ImportSpecifier : public ImportBaseSpecifier {
 public:
-    ImportDefaultSpecifier(AstSourceSpan location, AstNode* local);
-    Identifier* getLocal();
+    ImportSpecifier(AstSourceSpan location, AstNode* local, AstNode* imported, bool typeImport);
+    Identifier* getImported();
     virtual void applyChildren(const std::function<bool (AstNode*)>&) override;
 
 private:
-    AstNode* local;
+    Identifier *imported;
+    bool localEqualsImported;
 };
 
-class ImportNamespaceSpecifier : public AstNode {
+class ImportDefaultSpecifier : public ImportBaseSpecifier {
+public:
+    ImportDefaultSpecifier(AstSourceSpan location, AstNode* local);
+    virtual void applyChildren(const std::function<bool (AstNode*)>&) override;
+};
+
+class ImportNamespaceSpecifier : public ImportBaseSpecifier {
 public:
     ImportNamespaceSpecifier(AstSourceSpan location, AstNode* local);
-    Identifier* getLocal();
     virtual void applyChildren(const std::function<bool (AstNode*)>&) override;
-
-private:
-    AstNode* local;
 };
 
 class ExportNamedDeclaration : public AstNode {

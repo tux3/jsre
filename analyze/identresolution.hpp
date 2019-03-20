@@ -2,6 +2,9 @@
 #define IDENTRESOLUTION_HPP
 
 #include <unordered_map>
+#include <vector>
+#include <string>
+#include <memory>
 #include <v8.h>
 
 class AstNode;
@@ -11,10 +14,33 @@ class ImportSpecifier;
 class MemberExpression;
 class ThisExpression;
 
+struct LexicalBindings {
+    LexicalBindings(LexicalBindings* parent, AstNode* code, bool isFullScope)
+        : typeDeclarations{}
+        , localDeclarations{}
+        , varDeclarations{isFullScope ? localDeclarations : parent->varDeclarations}
+        , children{}
+        , parent{parent}
+        , code{code}
+    {
+    }
+    LexicalBindings(const LexicalBindings& other) = delete;
+    LexicalBindings(LexicalBindings&& other) = default;
+
+    std::unordered_map<std::string, Identifier*> typeDeclarations;
+    std::unordered_map<std::string, Identifier*> localDeclarations;
+    std::unordered_map<std::string, Identifier*>& varDeclarations;
+    std::vector<std::unique_ptr<LexicalBindings>> children;
+    LexicalBindings* parent;
+    AstNode* code;
+};
+
+
 struct IdentifierResolutionResult
 {
     std::unordered_map<Identifier*, Identifier*> resolvedIdentifiers;
     std::vector<std::string> missingGlobalIdentifiers;
+    std::unique_ptr<LexicalBindings> scopeChain;
 };
 
 /**
@@ -55,7 +81,7 @@ AstNode* resolveImportedIdentifierDeclaration(AstNode& importSpec);
  *
  * Return nullptr if this import specifier refers to a native module, or if the declaration couldn't be found.
  *
- * WARNING: The identifier is not necessarily the name of the returned declaration, it could also be another name introduce by the declaration!
+ * WARNING: We return the declaration, so the identifier is not necessarily its id, it could also be another name introduce by the declaration!
  *          In particular for Function* nodes, we consider that the parameters are not declared by the parent functions, but declare themselves
  *          Otherwise callers couldn't tell whether the identifier refers to the function or its argument: `function test(test) { return test }`
  */

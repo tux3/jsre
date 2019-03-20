@@ -152,13 +152,17 @@ vector<T*> importChildArray(const Local<Object>& node, const char* name)
     return result;
 }
 
-AstRoot* importBabylonAst(::Module& parentModule, v8::Local<v8::Object> astObj)
+AstRoot* importBabylonAst(::Module& parentModule, v8::Local<v8::Object> astObj, bool keepComments)
 {
     auto program = getObj(astObj, "program");
     assert(getStr(program, "type") == "Program");
 
     auto loc = importLocation(program);
-    return new AstRoot(loc, parentModule, importChildArray(program, "body"));
+    vector<AstComment*> comments;
+    if (keepComments)
+        comments = importChildArray<AstComment>(astObj, "comments");
+
+    return new AstRoot(loc, parentModule, importChildArray(program, "body"), comments);
 }
 
 AstSourceSpan importLocation(const Local<Object>& node)
@@ -176,6 +180,16 @@ AstSourceSpan importLocation(const Local<Object>& node)
         {beginOff, beginLine, beginCol},
         {endOff, endLine, endCol}
     };
+}
+
+AstNode* importCommentLine(const Local<Object>& node, AstSourceSpan& loc)
+{
+    return new AstComment(loc, AstComment::Type::Line, getStr(node, "value"));
+}
+
+AstNode* importCommentBlock(const Local<Object>& node, AstSourceSpan& loc)
+{
+    return new AstComment(loc, AstComment::Type::Block, getStr(node, "value"));
 }
 
 AstNode* importIdentifier(const Local<Object>& node, AstSourceSpan& loc)

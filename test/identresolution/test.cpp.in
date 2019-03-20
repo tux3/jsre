@@ -1,0 +1,117 @@
+#include <catch.hpp>
+#include <string>
+#include <vector>
+#include <unordered_map>
+#include <unordered_set>
+#include <memory>
+#include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <streambuf>
+#include <iostream>
+#include <v8.h>
+
+#include "ast/ast.hpp"
+#include "ast/parse.hpp"
+#include "analyze/identresolution.hpp"
+#include "module/global.hpp"
+#include "module/module.hpp"
+#include "utils/utils.hpp"
+#include "utils/trim.hpp"
+#include "v8/isolatewrapper.hpp"
+
+using namespace std;
+namespace fs = std::filesystem;
+
+static IsolateWrapper isolateWrapper;
+static vector<string> filesToTest = {};
+
+static void testNextFile() {
+    string path = filesToTest.back();
+    filesToTest.pop_back();
+
+    startParsingThreads();
+
+    string script = readFileStr(path.c_str());
+    Module module(isolateWrapper, path);
+    AstRoot& astRoot = *parseSourceScriptAsync(module, script, true).get();
+
+    stopParsingThreads();
+
+    v8::HandleScope handleScope(*isolateWrapper);
+    v8::Local<v8::Context> context = prepareGlobalContext(isolateWrapper);
+
+    auto [resolvedIdentifiers, missingGlobalIdentifiers, scopeChain] = resolveModuleIdentifiers(context, astRoot);
+    CHECK(missingGlobalIdentifiers.empty());
+
+    const auto& comments = astRoot.getComments();
+    unordered_map<unsigned, unique_ptr<unsigned>> declFromComments;
+    for (auto comment : comments) {
+        auto text = trim(comment->getText());
+        if (text.substr(0, strlen("decl ")) != "decl ")
+            continue;
+        auto declLine = text.substr(strlen("decl "));
+        if (declLine == "undefined") {
+            declFromComments[comment->getLocation().start.line] = nullptr;
+        } else if (declLine == "unknown") {
+            continue;
+        } else {
+            auto declLineNum = stoul(declLine);
+            declFromComments[comment->getLocation().start.line] = make_unique<unsigned>(declLineNum);
+        }
+    }
+
+    unordered_set<unsigned> linesWithIdentifiers;
+    for (const auto& resolvedIdentifier : resolvedIdentifiers) {
+        auto line = resolvedIdentifier.first->getLocation().start.line;
+        if (!linesWithIdentifiers.insert(line).second)
+            FAIL("More than one identifier has been resolved on line "+to_string(line)+", either the test file is wrong or we have duplicates.");
+    }
+
+    for (const auto& resolvedIdentifier : resolvedIdentifiers) {
+        auto idLine = resolvedIdentifier.first->getLocation().start.line;
+        auto resolvedDeclLine = resolvedIdentifier.second->getLocation().start.line;
+        auto expectedDeclPair = declFromComments.find(idLine);
+        if (expectedDeclPair == declFromComments.end())
+            FAIL("Did not expect '"+resolvedIdentifier.first->getName()+"' at line "+to_string(idLine)
+                 +" to resolve to line "+to_string(resolvedDeclLine)+", according to comments in test file");
+
+        auto& expectedDeclLine = expectedDeclPair->second;
+        if (resolvedIdentifier.second) {
+            if (!expectedDeclLine)
+                FAIL("Expected '"+resolvedIdentifier.first->getName()+"' at line "+to_string(idLine)
+                     +" to be undefined, but got declaration at line "+to_string(resolvedDeclLine));
+            if (*expectedDeclLine != resolvedDeclLine)
+                FAIL("Expected '"+resolvedIdentifier.first->getName()+"' at line "+to_string(idLine)
+                     +" to resolve to declaration at line "+to_string(*expectedDeclLine)+", but got line "+to_string(resolvedDeclLine));
+        } else {
+            CHECK(expectedDeclLine == nullptr);
+        }
+        declFromComments.erase(idLine);
+    }
+
+    if (!declFromComments.empty()) {
+        for (const auto& com : declFromComments) {
+            string expected = com.second ? "line "+to_string(*com.second) : "undefined";
+            UNSCOPED_INFO("Identifier at line "+to_string(com.first)+" should have resolved to "+expected);
+        }
+        FAIL_CHECK("Some identifiers were not resolved, but we expected them to be");
+    }
+}
+
+static struct RegisterIdentResolutionTestCases {
+    RegisterIdentResolutionTestCases();
+} registerCases;
+
+RegisterIdentResolutionTestCases::RegisterIdentResolutionTestCases() {
+    const char* cases[] = {
+        "@IDENT_RESOLUTION_TEST_CASE_FILES@"
+    };
+
+    for (auto filepath : cases) {
+        filesToTest.insert(begin(filesToTest), filepath);
+        auto filename = fs::path(filepath).filename();
+        auto testName = "Resolves identifiers for test file "+filename.string();
+        REGISTER_TEST_CASE(testNextFile, testName.c_str(), "[identresolution]")
+    }
+}
