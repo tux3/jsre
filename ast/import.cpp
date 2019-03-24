@@ -21,7 +21,7 @@ static const unordered_map<string, AstNode* (*)(const Local<Object>&, AstSourceS
 static bool hasKey(const Local<Object>& node, const char* key)
 {
     Isolate* isolate = node->GetIsolate();
-    auto keyStr = v8::String::NewFromOneByte(isolate, (uint8_t*)key, NewStringType::kInternalized).ToLocalChecked();
+    auto keyStr = v8::String::NewFromOneByte(isolate, (const uint8_t*)key, NewStringType::kInternalized).ToLocalChecked();
     return node->HasRealNamedProperty(isolate->GetCurrentContext(), keyStr).FromJust();
 }
 
@@ -29,7 +29,7 @@ static Local<Value> getVal(const Local<Object>& node, const char* key)
 {
     // TODO: We may want to create a string from OneByte instead of Utf8, if it's any faster. We can guarantee that AST node keys are ASCII anyways
     Isolate* isolate = node->GetIsolate();
-    auto keyStr = v8::String::NewFromOneByte(isolate, (uint8_t*)key, NewStringType::kInternalized).ToLocalChecked();
+    auto keyStr = v8::String::NewFromOneByte(isolate, (const uint8_t*)key, NewStringType::kInternalized).ToLocalChecked();
     auto val = node->GetRealNamedProperty(isolate->GetCurrentContext(), keyStr).ToLocalChecked();
     assert(!val->IsUndefined());
     return val;
@@ -38,7 +38,7 @@ static Local<Value> getVal(const Local<Object>& node, const char* key)
 static optional<Local<Value>> tryGetVal(const Local<Object>& node, const char* key)
 {
     Isolate* isolate = node->GetIsolate();
-    auto keyStr = v8::String::NewFromOneByte(isolate, (uint8_t*)key, NewStringType::kInternalized).ToLocalChecked();
+    auto keyStr = v8::String::NewFromOneByte(isolate, (const uint8_t*)key, NewStringType::kInternalized).ToLocalChecked();
     auto val = node->GetRealNamedProperty(isolate->GetCurrentContext(), keyStr);
     if (val.IsEmpty())
         return nullopt;
@@ -503,6 +503,8 @@ AstNode* importBinaryExpression(const Local<Object>& node, AstSourceSpan& loc)
         op = Operator::Division;
     else if (opStr == "%")
         op = Operator::Modulo;
+    else if (opStr == "**")
+        op = Operator::Exponentiation;
     else if (opStr == "|")
         op = Operator::BitwiseOr;
     else if (opStr == "^")
@@ -535,6 +537,8 @@ AstNode* importAssignmentExpression(const Local<Object>& node, AstSourceSpan& lo
         op = Operator::SlashEqual;
     else if (opStr == "%=")
         op = Operator::ModuloEqual;
+    else if (opStr == "**=")
+        op = Operator::ExponentiationEqual;
     else if (opStr == "<<=")
         op = Operator::LeftShiftEqual;
     else if (opStr == ">>=")
@@ -910,6 +914,11 @@ AstNode* importTupleTypeAnnotation(const Local<Object>& node, AstSourceSpan& loc
 AstNode* importUnionTypeAnnotation(const Local<Object>& node, AstSourceSpan& loc)
 {
     return new UnionTypeAnnotation(loc, importChildArray(node, "types"));
+}
+
+AstNode* importIntersectionTypeAnnotation(const Local<Object>& node, AstSourceSpan& loc)
+{
+    return new IntersectionTypeAnnotation(loc, importChildArray(node, "types"));
 }
 
 AstNode* importNullLiteralTypeAnnotation(const Local<Object>&, AstSourceSpan& loc)

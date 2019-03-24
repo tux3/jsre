@@ -1419,6 +1419,13 @@ UnionTypeAnnotation::UnionTypeAnnotation(AstSourceSpan location,std::vector<AstN
     setParentOfChildren();
 }
 
+IntersectionTypeAnnotation::IntersectionTypeAnnotation(AstSourceSpan location,std::vector<AstNode*> types)
+    : AstNode(location, AstNodeType::IntersectionTypeAnnotation)
+    , types{ move(types) }
+{
+    setParentOfChildren();
+}
+
 NullLiteralTypeAnnotation::NullLiteralTypeAnnotation(AstSourceSpan location)
     : AstNode(location, AstNodeType::NullLiteralTypeAnnotation)
 {

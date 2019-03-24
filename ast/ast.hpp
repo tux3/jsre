@@ -498,6 +498,7 @@ public:
         Times,
         Division,
         Modulo,
+        Exponentiation,
         BitwiseOr,
         BitwiseXor,
         BitwiseAnd,
@@ -524,6 +525,7 @@ public:
         TimesEqual,
         SlashEqual,
         ModuloEqual,
+        ExponentiationEqual,
         LeftShiftEqual,
         SignRightShiftEqual,
         ZeroingRightShiftEqual,
@@ -1080,6 +1082,15 @@ private:
 class UnionTypeAnnotation : public AstNode {
 public:
     UnionTypeAnnotation(AstSourceSpan location, std::vector<AstNode*> types);
+    virtual void applyChildren(const std::function<bool (AstNode*)>&) override;
+
+private:
+    std::vector<AstNode*> types;
+};
+
+class IntersectionTypeAnnotation : public AstNode {
+public:
+    IntersectionTypeAnnotation(AstSourceSpan location, std::vector<AstNode*> types);
     virtual void applyChildren(const std::function<bool (AstNode*)>&) override;
 
 private:

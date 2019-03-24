@@ -584,6 +584,12 @@ void UnionTypeAnnotation::applyChildren(const std::function<bool (AstNode*)>& cb
         return;
 }
 
+void IntersectionTypeAnnotation::applyChildren(const std::function<bool (AstNode*)>& cb)
+{
+    if (!applyArray(cb, types))
+        return;
+}
+
 void ClassImplements::applyChildren(const std::function<bool (AstNode*)>& cb)
 {
     if (!applyNode(cb, id))

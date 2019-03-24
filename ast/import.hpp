@@ -98,6 +98,7 @@
     X(ArrayTypeAnnotation)          \
     X(TupleTypeAnnotation)          \
     X(UnionTypeAnnotation)          \
+    X(IntersectionTypeAnnotation)   \
     X(TypeofTypeAnnotation)         \
     X(NullLiteralTypeAnnotation)    \
     X(NumberLiteralTypeAnnotation)  \

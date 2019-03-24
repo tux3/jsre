@@ -70,6 +70,8 @@ std::string valueStr<BinaryExpression::Operator>(BinaryExpression::Operator v)
         return "/";
     case BinaryExpression::Operator::Modulo:
         return "%";
+    case BinaryExpression::Operator::Exponentiation:
+        return "**";
     case BinaryExpression::Operator::BitwiseOr:
         return "|";
     case BinaryExpression::Operator::BitwiseXor:
@@ -149,6 +151,8 @@ std::string valueStr<AssignmentExpression::Operator>(AssignmentExpression::Opera
         return "/=";
     case AssignmentExpression::Operator::ModuloEqual:
         return "%=";
+    case AssignmentExpression::Operator::ExponentiationEqual:
+        return "**=";
     case AssignmentExpression::Operator::LeftShiftEqual:
         return "<<=";
     case AssignmentExpression::Operator::SignRightShiftEqual:
