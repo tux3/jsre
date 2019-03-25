@@ -1,5 +1,6 @@
 #include "dot.hpp"
 #include "ast/ast.hpp"
+#include "analyze/astqueries.hpp"
 #include "graph/graph.hpp"
 #include <cstring>
 
@@ -189,6 +190,8 @@ std::string makeLabel(const GraphNode& node)
             base += valueStr(((RegExpLiteral&)literal).getPattern());
     } else if (node.getType() == GraphNodeType::LoadValue
                || node.getType() == GraphNodeType::StoreValue
+               || node.getType() == GraphNodeType::LoadParameter
+               || node.getType() == GraphNodeType::StoreParameter
                || node.getType() == GraphNodeType::LoadNamedProperty
                || node.getType() == GraphNodeType::StoreNamedProperty) {
         base += " \\\""+((Identifier&)*node.getAstReference()).getName()+"\\\"";
@@ -202,6 +205,9 @@ std::string makeLabel(const GraphNode& node)
             else if (key->getType() == AstNodeType::NumericLiteral)
                 base += valueStr(((NumericLiteral*)key)->getValue());
         }
+    } else if (node.getType() == GraphNodeType::Function) {
+        if (auto id = ((Function*)node.getAstReference())->getId())
+            base += " \\\""+id->getName()+"\\\"";
     } else if (node.getType() == GraphNodeType::Case) {
         if (node.inputCount() == 0)
             base += " [Default]";
@@ -278,10 +284,20 @@ std::string makeInputLabel(GraphNodeType type, uint16_t j)
 
 std::string graphToDOT(const Graph& graph)
 {
-    std::string text = "digraph ControlGraph {\n{ rank=source; 0; };\n";
+    std::string text;
+    if (auto* id = graph.getFun().getId())
+        text += "// Function \""+id->getName()+"\"\n";
+    text += "digraph ControlGraph {\n{ rank=source; 0; };\n";
+
+    std::vector<bool> nodesUsed(graph.size());
+    for (uint16_t i = 0; i < graph.size(); ++i)
+        for (uint16_t input = 0; input < graph.getNode(i).inputCount(); ++input)
+            nodesUsed[graph.getNode(i).getInput(input)] = true;
 
     for (uint16_t i = 0; i < graph.size(); ++i) {
         const GraphNode& node = graph.getNode(i);
+        if (!node.prevCount() && !node.nextCount() && !nodesUsed[i])
+            continue;
         text += to_string(i) + " [label=\"" + makeLabel(node) + "\"];\n";
         for (uint16_t j = 0; j < node.prevCount(); ++j)
             text += to_string(node.getPrev(j)) + " -> " + to_string(i) + " [color=red style=bold label=\""+makePrevLabel(node.getType(), j)+"\"];\n";

@@ -6,22 +6,24 @@
 #include <unordered_map>
 #include <memory>
 
+#include "graph/basicblock.hpp"
 #include "queries/types.hpp"
 #include "graph/type.hpp"
-#include "graph/basicblock.hpp"
 
 class AstNode;
 class GraphNode;
 class GraphStart;
+struct LexicalBindings;
 
 class Graph
 {
 public:
-    Graph(Function& fun);
+    Graph(Function& fun, const LexicalBindings& scope);
     Function& getFun() const;
     uint16_t size() const;
     const GraphNode &getNode(uint16_t n) const;
     GraphNode &getNode(uint16_t n);
+    uint16_t getUndefinedNode();
     uint16_t addNode(GraphNode&& node);
     uint16_t addNode(GraphNode&& node, uint16_t prev);
     uint16_t addNode(GraphNode &&node, const std::vector<uint16_t> &prevs);
@@ -29,14 +31,14 @@ public:
     uint16_t blockCount() const;
     const BasicBlock& getBasicBlock(uint16_t n) const;
     BasicBlock& getBasicBlock(uint16_t n);
-    BasicBlock &addBasicBlock(std::vector<uint16_t> prevs);
+    BasicBlock& addBasicBlock(std::vector<uint16_t> prevs, const LexicalBindings& scope, bool shouldHoist);
 
 public:
     std::unordered_map<const GraphNode*, TypeInfo> nodeTypes;
 
 private:
     std::vector<GraphNode> nodes;
-    std::vector<BasicBlock> blocks;
+    std::vector<std::unique_ptr<BasicBlock>> blocks;
     Function& fun;
 };
 

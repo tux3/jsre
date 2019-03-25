@@ -4,6 +4,8 @@
 #include "graph/graph.hpp"
 #include "ast/ast.hpp"
 #include <memory>
+#include <vector>
+#include <unordered_set>
 
 class Module;
 class Function;
@@ -13,12 +15,13 @@ class GraphBuilder
 public:
     GraphBuilder(Function& fun);
     std::unique_ptr<Graph> buildFromAst();
+    Graph& getGraph();
 
 private:
-    uint16_t getUndefinedNode();
+    BasicBlock& addBasicBlock(std::vector<uint16_t> prevs, const LexicalBindings& scope);
+    void writeVariableById(BasicBlock& block, Identifier& id, uint16_t value);
+
     BasicBlock* processArgument(BasicBlock* block, AstNode& node);
-    void hoistFunctionNode(BasicBlock* block, Function &node);
-    void hoistVariableDeclarationNode(BasicBlock* block, VariableDeclaration &node);
     // Returns the basic block where next nodes should be added
     BasicBlock* processAstNode(BasicBlock* block, AstNode& node);
     BasicBlock* processFunctionNode(BasicBlock* block, Function &node);
@@ -55,9 +58,9 @@ private:
     std::vector<uint16_t> catchStack; // Nodes able to catch an exception thrown in the current block (last has priority)
     std::vector<std::vector<uint16_t>> pendingBreakBlocks; // Blocks of break nodes that haven't been tied up into a merge by their parent yet, one vector per parent scope.
     std::vector<std::vector<uint16_t>> pendingContinueBlocks; // Blocks of continue nodes that haven't been tied up into a merge by their parent yet, one vector per parent scope.
+    std::unordered_set<const LexicalBindings*> hoistedScopes; // Scopes for which a basic block has already performed hoisting
     Function& fun;
     Module& parentModule;
-    uint16_t undefinedNode;
 };
 
 #endif // GRAPHBUILDER_HPP

@@ -1,6 +1,8 @@
 ﻿#include "graphbuilder.hpp"
+#include "basicblock.hpp"
 #include "ast/walk.hpp"
 #include "analyze/astqueries.hpp"
+#include "analyze/identresolution.hpp"
 #include "utils/reporting.hpp"
 #include "module/module.hpp"
 #include <cassert>
@@ -8,19 +10,30 @@
 using namespace std;
 
 GraphBuilder::GraphBuilder(Function &fun)
-    : fun{fun}, parentModule{fun.getParentModule()}, undefinedNode{0}
+    : fun{fun}, parentModule{fun.getParentModule()}
 {
 }
 
 std::unique_ptr<Graph> GraphBuilder::buildFromAst()
 {
-    graph = make_unique<Graph>(fun);
+    const LexicalBindings* funScope = &fun.getParentModule().getScopeChain();
+    function<void(AstNode*)> walkFunScopeChain;
+    walkFunScopeChain = [&](AstNode* node){
+        if (AstNode* parent = node->getParent())
+            walkFunScopeChain(parent);
+        funScope = &funScope->scopeForChildNode(node);
+    };
+    walkFunScopeChain(&fun);
+    assert(funScope->code == &fun);
 
-    for (const auto& param : fun.getParams())
-        processArgument(&graph->getBasicBlock(0), *param);
+    graph = make_unique<Graph>(fun, *funScope);
+    auto& rootBlock = addBasicBlock({}, *funScope);
+    rootBlock.seal();
 
     AstNode* body = fun.getBody();
-    auto* block = processAstNode(&graph->getBasicBlock(0), *body);
+    BasicBlock* bodyBlock = &addBasicBlock({graph->getBasicBlock(0).getSelfId()}, graph->getBasicBlock(0).getScope().scopeForChildNode(body));
+    bodyBlock->seal();
+    auto* block = processAstNode(bodyBlock, *body);
     if (body->getType() != AstNodeType::BlockStatement)
         block->addNode({GraphNodeType::Return, block->getNewest()}, block->getNext());
 
@@ -57,17 +70,35 @@ std::unique_ptr<Graph> GraphBuilder::buildFromAst()
     return std::move(graph);
 }
 
-uint16_t GraphBuilder::getUndefinedNode()
+Graph &GraphBuilder::getGraph()
 {
-    if (!undefinedNode)
-        undefinedNode = graph->getBasicBlock(0).addNode({GraphNodeType::Undefined});
-    return undefinedNode;
+    return *graph;
 }
 
-BasicBlock *GraphBuilder::processArgument(BasicBlock *block, AstNode &node)
+BasicBlock &GraphBuilder::addBasicBlock(std::vector<uint16_t> prevs, const LexicalBindings &scope)
 {
-    // TODO: FIXME: Preprocess all the parameters, add nodes, and declare them as variables in the root basic block. Then just work with the variables.
-    return block;
+    bool shouldHoist = hoistedScopes.insert(&scope).second;
+    return graph->addBasicBlock(move(prevs), scope, shouldHoist);
+}
+
+void GraphBuilder::writeVariableById(BasicBlock &block, Identifier &id, uint16_t value)
+{
+    const auto& resolvedIds = parentModule.getResolvedLocalIdentifiers();
+    auto declarationIt = resolvedIds.find((Identifier*)&id);
+    Identifier* foundDeclId = declarationIt != resolvedIds.end() ? declarationIt->second : nullptr;
+    if (isChildOf(foundDeclId, *fun.getBody())) {
+        block.writeVariable(foundDeclId, value);
+        return;
+    }
+
+    for (auto param : fun.getParams()) {
+        if (isChildOf(foundDeclId, *param)) {
+            block.addNode({GraphNodeType::StoreParameter, foundDeclId}, block.getNext());
+            return;
+        }
+    }
+
+    block.addNode({GraphNodeType::StoreValue, value, &id}, block.getNext());
 }
 
 BasicBlock* GraphBuilder::processAstNode(BasicBlock* block, AstNode &node)
@@ -75,24 +106,29 @@ BasicBlock* GraphBuilder::processAstNode(BasicBlock* block, AstNode &node)
     switch (node.getType()) {
     case AstNodeType::EmptyStatement:
         break;
-    case AstNodeType::BlockStatement:
-        // Hoisting first
+    case AstNodeType::BlockStatement: {
+        BasicBlock *innerBlock = &addBasicBlock({block->getSelfId()}, block->getScope().scopeForChildNode(&node));
+        block->setFilled();
+        innerBlock->setNext(block->getNext());
+        innerBlock->seal();
         node.applyChildren([&](AstNode* child) {
-            if (isFunctionNode(*child))
-                hoistFunctionNode(block, *(Function*)child);
-            else if (child->getType() == AstNodeType::VariableDeclaration)
-                hoistVariableDeclarationNode(block, *(VariableDeclaration*)child);
-            return true;
-        });
-        node.applyChildren([&](AstNode* child) {
-            block = processAstNode(block, *child);
+            innerBlock = processAstNode(innerBlock, *child);
             if (child->getType() == AstNodeType::ReturnStatement || child->getType() == AstNodeType::ThrowStatement)
                 return false;
-            if (block->isFilled()) // If there is any more code it must be unreachable
+            if (innerBlock->isFilled()) // If there is any more code it must be unreachable
                 return false;
             return true;
         });
+        if (innerBlock->isFilled()) {
+            block = innerBlock; // We're not exiting the scope, but that's okay since the block is filled
+        } else {
+            innerBlock->setFilled();
+            block = &addBasicBlock({innerBlock->getSelfId()}, block->getScope());
+            block->setNext(innerBlock->getNext());
+            block->seal();
+        }
         break;
+    }
     case AstNodeType::FunctionDeclaration:
     case AstNodeType::FunctionExpression:
     case AstNodeType::ArrowFunctionExpression:
@@ -227,7 +263,7 @@ BasicBlock *GraphBuilder::processIfStatement(BasicBlock *block, IfStatement &nod
     vector<uint16_t> mergePrevBlocks;
 
     // Add then block & node
-    BasicBlock *consequent = &graph->addBasicBlock({prevBlockId});
+    BasicBlock *consequent = &addBasicBlock({prevBlockId}, block->getScope().scopeForChildNode(node.getConsequent()));
     consequent->seal();
     consequent->addNode({GraphNodeType::IfTrue}, prevNodeId);
     consequent = processAstNode(consequent, *node.getConsequent());
@@ -238,7 +274,7 @@ BasicBlock *GraphBuilder::processIfStatement(BasicBlock *block, IfStatement &nod
 
     // Add alternate block (and node, if any)
     AstNode* alternateNode = node.getAlternate();
-    BasicBlock *alternate = &graph->addBasicBlock({prevBlockId});
+    BasicBlock *alternate = &addBasicBlock({prevBlockId}, block->getScope().scopeForChildNode(alternateNode));
     alternate->seal();
     alternate->addNode({GraphNodeType::IfFalse}, prevNodeId);
     if (alternateNode)
@@ -249,7 +285,7 @@ BasicBlock *GraphBuilder::processIfStatement(BasicBlock *block, IfStatement &nod
     }
 
     // Create block for merge and add merge node
-    BasicBlock *mergeBlock = &graph->addBasicBlock(move(mergePrevBlocks));
+    BasicBlock *mergeBlock = &addBasicBlock(move(mergePrevBlocks), block->getScope());
     if (!mergePrevs.empty()) {
         mergeBlock->addNode({GraphNodeType::Merge}, mergePrevs);
         mergeBlock->seal();
@@ -265,7 +301,7 @@ BasicBlock *GraphBuilder::processWhileStatement(BasicBlock *block, WhileStatemen
 {
     // Add new block for loop header
     uint16_t prevNodeId = block->getNext();
-    BasicBlock *headerBlock = &graph->addBasicBlock({block->getSelfId()});
+    BasicBlock *headerBlock = &addBasicBlock({block->getSelfId()}, block->getScope());
     uint16_t headerStartBlockId = headerBlock->getSelfId();
     uint16_t headerMergeNode = headerBlock->addNode({GraphNodeType::Merge}, prevNodeId);
     headerBlock = processAstNode(headerBlock, *node.getTest());
@@ -275,7 +311,7 @@ BasicBlock *GraphBuilder::processWhileStatement(BasicBlock *block, WhileStatemen
     // Add body block & node
     pendingBreakBlocks.emplace_back();
     pendingContinueBlocks.emplace_back();
-    BasicBlock *body = &graph->addBasicBlock({headerEndBlockId});
+    BasicBlock *body = &addBasicBlock({headerEndBlockId}, block->getScope().scopeForChildNode(node.getBody()));
     body->seal();
     body->addNode({GraphNodeType::IfTrue}, headerLoopNode);
     body = processAstNode(body, *node.getBody());
@@ -300,7 +336,7 @@ BasicBlock *GraphBuilder::processWhileStatement(BasicBlock *block, WhileStatemen
     headerBlock->seal();
 
     // Create block for loop exit
-    BasicBlock *exitBlock = &graph->addBasicBlock({headerEndBlockId});
+    BasicBlock *exitBlock = &addBasicBlock({headerEndBlockId}, block->getScope());
     exitBlock->addNode({GraphNodeType::IfFalse}, headerLoopNode);
     exitBlock->seal();
 
@@ -321,7 +357,7 @@ BasicBlock *GraphBuilder::processWhileStatement(BasicBlock *block, WhileStatemen
     } else {
         mergePrevs.push_back(exitBlock->getNext());
         mergePrevBlocks.push_back(exitBlock->getSelfId());
-        BasicBlock *mergeBlock = &graph->addBasicBlock({mergePrevBlocks});
+        BasicBlock *mergeBlock = &addBasicBlock({mergePrevBlocks}, block->getScope());
         mergeBlock->addNode({GraphNodeType::Merge}, mergePrevs);
         mergeBlock->seal();
         return mergeBlock;
@@ -334,7 +370,7 @@ BasicBlock *GraphBuilder::processDoWhileStatement(BasicBlock *block, DoWhileStat
     pendingBreakBlocks.emplace_back();
     pendingContinueBlocks.emplace_back();
     uint16_t prevNodeId = block->getNext();
-    BasicBlock* body = &graph->addBasicBlock({block->getSelfId()});
+    BasicBlock* body = &addBasicBlock({block->getSelfId()}, block->getScope().scopeForChildNode(node.getBody()));
     uint16_t bodyStartId = body->getSelfId();
     uint16_t bodyMergeNode = body->addNode({GraphNodeType::Merge}, prevNodeId);
     body = processAstNode(body, *node.getBody());
@@ -349,7 +385,7 @@ BasicBlock *GraphBuilder::processDoWhileStatement(BasicBlock *block, DoWhileStat
         uint16_t testEndBlockId = body->getSelfId();
 
         // Need a whole block just to jump back to body
-        BasicBlock* ifTrueBlock = &graph->addBasicBlock({testEndBlockId});
+        BasicBlock* ifTrueBlock = &addBasicBlock({testEndBlockId}, body->getScope());
         ifTrueBlock->seal();
         ifTrueBlock->addNode({GraphNodeType::IfTrue}, loopNode);
         graph->getNode(ifTrueBlock->getNext()).addNext(bodyMergeNode);
@@ -357,7 +393,7 @@ BasicBlock *GraphBuilder::processDoWhileStatement(BasicBlock *block, DoWhileStat
         graph->getBasicBlock(bodyStartId).addPrevBlock(ifTrueBlock->getSelfId());
 
         // Loop exit
-        BasicBlock *exitBlock = &graph->addBasicBlock({testEndBlockId});
+        BasicBlock *exitBlock = &addBasicBlock({testEndBlockId}, block->getScope());
         exitBlock->addNode({GraphNodeType::IfFalse}, loopNode);
         exitBlock->seal();
         preMergeBlock = exitBlock;
@@ -388,13 +424,21 @@ BasicBlock *GraphBuilder::processDoWhileStatement(BasicBlock *block, DoWhileStat
 
     // Create merge if we need to
     if (mergePrevs.empty()) {
-        return preMergeBlock;
+        // The preMergeBlock is still in the loop's scope, we can't let anyone outside the loop add nodes in that scope, so make a new block if needed
+        if (preMergeBlock->isFilled())
+            return preMergeBlock;
+        BasicBlock *scopeExitBlock = &addBasicBlock({preMergeBlock->getSelfId()}, block->getScope());
+        // Steal the previous block's next, we "own" it now. (No need to take the newest, DoWhile is not an expression).
+        preMergeBlock->setFilled();
+        scopeExitBlock->setNext(preMergeBlock->getNext());
+        scopeExitBlock->seal();
+        return scopeExitBlock;
     } else {
         if (!preMergeBlock->isFilled()) {
             mergePrevs.push_back(preMergeBlock->getNext());
             mergePrevBlocks.push_back(preMergeBlock->getSelfId());
         }
-        BasicBlock *mergeBlock = &graph->addBasicBlock({mergePrevBlocks});
+        BasicBlock *mergeBlock = &addBasicBlock({mergePrevBlocks}, block->getScope());
         mergeBlock->addNode({GraphNodeType::Merge}, mergePrevs);
         mergeBlock->seal();
         return mergeBlock;
@@ -403,15 +447,21 @@ BasicBlock *GraphBuilder::processDoWhileStatement(BasicBlock *block, DoWhileStat
 
 BasicBlock *GraphBuilder::processForStatement(BasicBlock *block, ForStatement &node)
 {
-    // Loop init goes first (Remember that variable visibility is not tied to our basic blocks at all! It's resolved statically from the AST)
-    if (AstNode* init = node.getInit())
-        block = processAstNode(block, *init);
+    const LexicalBindings& forScope = block->getScope().scopeForChildNode(&node);
 
-    // Add new block for loop header
-    uint16_t prevNodeId = block->getNext();
-    BasicBlock *headerBlock = &graph->addBasicBlock({block->getSelfId()});
+    // Loop init goes first (if any)
+    BasicBlock *initBlock = &addBasicBlock({block->getSelfId()}, forScope);
+    block->setFilled();
+    initBlock->setNext(block->getNext()); // Steal the prev block's next, since we may have an empty block (but we need the scope).
+    initBlock->seal();
+    if (AstNode* init = node.getInit())
+        initBlock = processAstNode(initBlock, *init);
+    initBlock->setFilled();
+
+    // Add new block for loop merge and test
+    BasicBlock *headerBlock = &addBasicBlock({initBlock->getSelfId()}, forScope);
     uint16_t headerStartBlockId = headerBlock->getSelfId();
-    uint16_t headerMergeNode = headerBlock->addNode({GraphNodeType::Merge}, prevNodeId);
+    uint16_t headerMergeNode = headerBlock->addNode({GraphNodeType::Merge}, initBlock->getNext());
     uint16_t headerLoopNode;
     if (AstNode* test = node.getTest()) {
         headerBlock = processAstNode(headerBlock, *test);
@@ -419,12 +469,11 @@ BasicBlock *GraphBuilder::processForStatement(BasicBlock *block, ForStatement &n
     } else {
         headerLoopNode = headerBlock->addNode({GraphNodeType::Loop}, headerBlock->getNext());
     }
-    uint16_t headerEndBlockId = headerBlock->getSelfId();
 
     // Add body block & node
     pendingBreakBlocks.emplace_back();
     pendingContinueBlocks.emplace_back();
-    BasicBlock *body = &graph->addBasicBlock({headerEndBlockId});
+    BasicBlock *body = &addBasicBlock({headerBlock->getSelfId()}, headerBlock->getScope().scopeForChildNode(node.getBody()));
     body->seal();
     body->addNode({GraphNodeType::IfTrue}, headerLoopNode);
     body = processAstNode(body, *node.getBody());
@@ -452,7 +501,7 @@ BasicBlock *GraphBuilder::processForStatement(BasicBlock *block, ForStatement &n
     headerBlock->seal();
 
     // Create block for loop exit
-    BasicBlock *exitBlock = &graph->addBasicBlock({headerEndBlockId});
+    BasicBlock *exitBlock = &addBasicBlock({headerBlock->getSelfId()}, block->getScope());
     exitBlock->addNode({GraphNodeType::IfFalse}, headerLoopNode);
     exitBlock->seal();
 
@@ -473,7 +522,7 @@ BasicBlock *GraphBuilder::processForStatement(BasicBlock *block, ForStatement &n
     } else {
         mergePrevs.push_back(exitBlock->getNext());
         mergePrevBlocks.push_back(exitBlock->getSelfId());
-        BasicBlock *mergeBlock = &graph->addBasicBlock({mergePrevBlocks});
+        BasicBlock *mergeBlock = &addBasicBlock({mergePrevBlocks}, block->getScope());
         mergeBlock->addNode({GraphNodeType::Merge}, mergePrevs);
         mergeBlock->seal();
         return mergeBlock;
@@ -483,32 +532,24 @@ BasicBlock *GraphBuilder::processForStatement(BasicBlock *block, ForStatement &n
 BasicBlock *GraphBuilder::processForOfStatement(BasicBlock *block, ForOfStatement &node)
 {
     // Add new block for loop header
-    uint16_t prevNodeId = block->getNext();
-    BasicBlock *headerBlock = &graph->addBasicBlock({block->getSelfId()});
+    BasicBlock *headerBlock = &addBasicBlock({block->getSelfId()}, block->getScope().scopeForChildNode(&node));
     uint16_t headerStartBlockId = headerBlock->getSelfId();
-    uint16_t headerMergeNode = headerBlock->addNode({GraphNodeType::Merge}, prevNodeId);
+    uint16_t headerMergeNode = headerBlock->addNode({GraphNodeType::Merge}, block->getNext());
     headerBlock = processAstNode(headerBlock, *node.getRight());
     uint16_t headerLoopNode = headerBlock->addNode({GraphNodeType::ForOfLoop, headerBlock->getNewest()}, headerBlock->getNext());
-    uint16_t headerEndBlockId = headerBlock->getSelfId();
 
     // Add body block
     pendingBreakBlocks.emplace_back();
     pendingContinueBlocks.emplace_back();
-    BasicBlock *body = &graph->addBasicBlock({headerEndBlockId});
+    BasicBlock *body = &addBasicBlock({headerBlock->getSelfId()}, headerBlock->getScope().scopeForChildNode(node.getBody()));
     body->seal();
     body->addNode({GraphNodeType::IfTrue}, headerLoopNode);
 
     // Process declaration of loop var
     // TODO: Make a generic function that takes the value assigned to the pattern and declares the right variables recursively by extracting from the value
     if (node.getLeft()->getType() == AstNodeType::Identifier) {
-        auto id = node.getLeft();
-        const auto& resolvedIds = parentModule.getResolvedLocalIdentifiers();
-        auto declarationIt = resolvedIds.find((Identifier*)id);
-        Identifier* foundDeclId = declarationIt != resolvedIds.end() ? declarationIt->second : nullptr;
-        if (isChildOf(foundDeclId, *fun.getBody()))
-            body->writeVariable(foundDeclId, headerLoopNode);
-        else
-            body->addNode({GraphNodeType::StoreValue, headerLoopNode, id}, body->getNext());
+        auto id = (Identifier*)node.getLeft();
+        writeVariableById(*body, *id, headerLoopNode);
     } else if (node.getLeft()->getType() == AstNodeType::VariableDeclaration) {
         auto decls = ((VariableDeclaration*)node.getLeft())->getDeclarators();
         assert(decls.size() == 1);
@@ -558,7 +599,7 @@ BasicBlock *GraphBuilder::processForOfStatement(BasicBlock *block, ForOfStatemen
     headerBlock->seal();
 
     // Create block for loop exit
-    BasicBlock *exitBlock = &graph->addBasicBlock({headerEndBlockId});
+    BasicBlock *exitBlock = &addBasicBlock({headerBlock->getSelfId()}, block->getScope());
     exitBlock->addNode({GraphNodeType::IfFalse}, headerLoopNode);
     exitBlock->seal();
 
@@ -579,7 +620,7 @@ BasicBlock *GraphBuilder::processForOfStatement(BasicBlock *block, ForOfStatemen
     } else {
         mergePrevs.push_back(exitBlock->getNext());
         mergePrevBlocks.push_back(exitBlock->getSelfId());
-        BasicBlock *mergeBlock = &graph->addBasicBlock({mergePrevBlocks});
+        BasicBlock *mergeBlock = &addBasicBlock({mergePrevBlocks}, block->getScope());
         mergeBlock->addNode({GraphNodeType::Merge}, mergePrevs);
         mergeBlock->seal();
         return mergeBlock;
@@ -590,14 +631,12 @@ BasicBlock *GraphBuilder::processConditionalExpression(BasicBlock *block, Condit
 {
     block = processAstNode(block, *node.getTest());
     block->addNode({GraphNodeType::If, block->getNewest()}, block->getNext());
-    uint16_t prevNodeId = block->getNext();
-    uint16_t prevBlockId = block->getSelfId();
     vector<uint16_t> mergePrevs;
 
     // Add then block & node
-    BasicBlock *consequent = &graph->addBasicBlock({prevBlockId});
+    BasicBlock *consequent = &addBasicBlock({block->getSelfId()}, block->getScope().scopeForChildNode(node.getConsequent()));
     consequent->seal();
-    consequent->addNode({GraphNodeType::IfTrue}, prevNodeId);
+    consequent->addNode({GraphNodeType::IfTrue}, block->getNext());
     consequent = processAstNode(consequent, *node.getConsequent());
     uint16_t consequentId = consequent->getSelfId();
     assert(!consequent->isFilled());
@@ -606,9 +645,9 @@ BasicBlock *GraphBuilder::processConditionalExpression(BasicBlock *block, Condit
 
     // Add alternate block (and node, if any)
     AstNode* alternateNode = node.getAlternate();
-    BasicBlock *alternate = &graph->addBasicBlock({prevBlockId});
+    BasicBlock *alternate = &addBasicBlock({block->getSelfId()}, block->getScope().scopeForChildNode(alternateNode));
     alternate->seal();
-    alternate->addNode({GraphNodeType::IfFalse}, prevNodeId);
+    alternate->addNode({GraphNodeType::IfFalse}, block->getNext());
     assert(alternateNode);
     alternate = processAstNode(alternate, *alternateNode);
     uint16_t alternateId = alternate->getSelfId();
@@ -617,7 +656,7 @@ BasicBlock *GraphBuilder::processConditionalExpression(BasicBlock *block, Condit
     uint16_t alternateNewest = alternate->getNewest();
 
     // Create block for merge and add merge node + phi
-    BasicBlock *mergeBlock = &graph->addBasicBlock({consequentId, alternateId});
+    BasicBlock *mergeBlock = &addBasicBlock({consequentId, alternateId}, block->getScope());
     mergeBlock->addNode({GraphNodeType::Merge}, mergePrevs);
     mergeBlock->seal();
 
@@ -628,17 +667,11 @@ BasicBlock *GraphBuilder::processConditionalExpression(BasicBlock *block, Condit
 
 BasicBlock *GraphBuilder::processTryStatement(BasicBlock *block, TryStatement &node)
 {
-    uint16_t prevNodeId = block->getNext();
-    uint16_t prevBlockId = block->getSelfId();
-
-    BasicBlock *tryBlock = &graph->addBasicBlock({prevBlockId});
-    uint16_t tryBlockId = tryBlock->getSelfId();
-    uint16_t tryNodeId = tryBlock->addNode({GraphNodeType::Try, &node}, prevNodeId);
+    BasicBlock *tryBlock = &addBasicBlock({block->getSelfId()}, block->getScope().scopeForChildNode(node.getBlock()));
+    uint16_t tryNodeId = tryBlock->addNode({GraphNodeType::Try, &node}, block->getNext());
     tryBlock->seal();
 
     BasicBlock *catchBlock = nullptr;
-    uint16_t catchBlockId = 0;
-
     BasicBlock *mergeBlock = nullptr;
     vector<uint16_t> mergePrevs;
     vector<uint16_t> mergePrevBlocks;
@@ -650,8 +683,7 @@ BasicBlock *GraphBuilder::processTryStatement(BasicBlock *block, TryStatement &n
         }
 
         // Prepare the catch header, so that throwing in the try{} find our handler
-        catchBlock = &graph->addBasicBlock({prevBlockId}); // Because we see variables declared in prev block, not e.g. in the try
-        catchBlockId = catchBlock->getSelfId();
+        catchBlock = &addBasicBlock({block->getSelfId()}, block->getScope().scopeForChildNode(handler)); // Because we see variables declared in prev block, not e.g. in the try
         catchBlock->seal();
         catchStack.push_back(catchBlock->addNode({GraphNodeType::CatchException, tryNodeId}, true));
 
@@ -663,29 +695,27 @@ BasicBlock *GraphBuilder::processTryStatement(BasicBlock *block, TryStatement &n
         }
 
         // Process the try block
-        tryBlock = processAstNode(&graph->getBasicBlock(tryBlockId), *node.getBlock());
-        tryBlockId = tryBlock->getSelfId();
+        tryBlock = processAstNode(&graph->getBasicBlock(tryBlock->getSelfId()), *node.getBlock());
         catchStack.pop_back();
         auto& lastTryNode = graph->getNode(tryBlock->getNext());
         if (!tryBlock->isFilled() && lastTryNode.getType() != GraphNodeType::Return && lastTryNode.getType() != GraphNodeType::Throw) {
             mergePrevs.push_back(tryBlock->getNext());
-            mergePrevBlocks.push_back(tryBlockId);
+            mergePrevBlocks.push_back(tryBlock->getSelfId());
         }
 
         // Process the catch
-        catchBlock = processAstNode(&graph->getBasicBlock(catchBlockId), *handler->getBody());
-        catchBlockId = catchBlock->getSelfId();
+        catchBlock = processAstNode(&graph->getBasicBlock(catchBlock->getSelfId()), *handler->getBody());
         auto& lastCatchNode = graph->getNode(catchBlock->getNext());
         if (!catchBlock->isFilled() && lastCatchNode.getType() != GraphNodeType::Return && lastCatchNode.getType() != GraphNodeType::Throw) {
             mergePrevs.push_back(catchBlock->getNext());
-            mergePrevBlocks.push_back(catchBlockId);
+            mergePrevBlocks.push_back(catchBlock->getSelfId());
         }
     } else { // We have just a finally
         trace(node, "Cannot handle finally clauses");
         throw runtime_error("Cannot handle finally clauses");
     }
 
-    mergeBlock = &graph->addBasicBlock(move(mergePrevBlocks));
+    mergeBlock = &addBasicBlock(move(mergePrevBlocks), block->getScope());
     if (!mergePrevs.empty()) {
         mergeBlock->addNode({GraphNodeType::Merge}, mergePrevs);
         mergeBlock->seal();
@@ -734,7 +764,16 @@ BasicBlock *GraphBuilder::processIdentifierNode(BasicBlock *block, Identifier &n
         assert(value != 0);
         block->setNewest(value);
     } else {
-        block->addNode({GraphNodeType::LoadValue, &node}, block->getNext());
+        bool isParam = false;
+        for (auto param : fun.getParams()) {
+            if (isChildOf(declarationIdentifier, *param)) {
+                block->addNode({GraphNodeType::LoadParameter, declarationIdentifier}, block->getNext());
+                isParam = true;
+                break;
+            }
+        }
+        if (!isParam)
+            block->addNode({GraphNodeType::LoadValue, &node}, block->getNext());
     }
     return block;
 }
@@ -753,15 +792,7 @@ BasicBlock *GraphBuilder::processAssignmentExprNode(BasicBlock *block, Assignmen
             block = processAstNode(block, *node.getRight());
             block->addNode({GraphNodeType::BinaryOperator, {leftValue, block->getNewest()}, &node});
         }
-        uint16_t value = block->getNewest();
-
-        const auto& resolvedIds = parentModule.getResolvedLocalIdentifiers();
-        auto declarationIt = resolvedIds.find((Identifier*)left);
-        Identifier* declId = declarationIt != resolvedIds.end() ? declarationIt->second : nullptr;
-        if (isChildOf(declId, *fun.getBody()))
-            block->writeVariable(declId, value);
-        else
-            block->addNode({GraphNodeType::StoreValue, value, left}, block->getNext());
+        writeVariableById(*block, *(Identifier*)left, block->getNewest());
     } else if (left->getType() == AstNodeType::MemberExpression) {
         auto leftExpr = (MemberExpression*)left;
         block = processAstNode(block, *leftExpr->getObject());
@@ -816,7 +847,7 @@ BasicBlock *GraphBuilder::processArrayExprNode(BasicBlock *block, ArrayExpressio
     vector<uint16_t> elemNodes;
     for (auto elem : node.getElements()) {
         if (!elem) {
-            block->setNewest(getUndefinedNode());
+            block->setNewest(graph->getUndefinedNode());
         } else {
             block = processAstNode(block, *elem);
         }
@@ -894,22 +925,10 @@ BasicBlock* GraphBuilder::processVariableDeclarationNode(BasicBlock* block, Vari
                 throw runtime_error("GraphBuilder cannot handle declaration with "s+idNode->getTypeName()+" left-hand side");
             }
         } else {
-            block->writeVariable((Identifier*)idNode, getUndefinedNode());
+            block->writeVariable((Identifier*)idNode, graph->getUndefinedNode());
         }
     }
     return block;
-}
-
-void GraphBuilder::hoistVariableDeclarationNode(BasicBlock* block, VariableDeclaration &node)
-{
-    // This just pre-declares the undefined variables early in the basic block, the value will be re-defined at the actual declaration
-    if (node.getKind() != VariableDeclaration::Kind::Var)
-        return;
-    auto& decls = ((VariableDeclaration&)node).getDeclarators();
-    for (VariableDeclarator* decl : decls) {
-        auto startBlock = block->getSelfId() ? &graph->getBasicBlock(0) : block;
-        startBlock->writeVariable((Identifier*)decl->getId(), getUndefinedNode());
-    }
 }
 
 BasicBlock *GraphBuilder::processObjectPatternNode(BasicBlock *block, ObjectPattern &node, uint16_t object)
@@ -976,15 +995,6 @@ BasicBlock* GraphBuilder::processFunctionNode(BasicBlock* block, Function &node)
     return block;
 }
 
-void GraphBuilder::hoistFunctionNode(BasicBlock* block, Function &node)
-{
-    block->addNode({GraphNodeType::Function, &node}, block->getNext());
-    if (auto* id = node.getId()) {
-        assert(node.getType() == AstNodeType::FunctionExpression || node.getType() == AstNodeType::FunctionDeclaration);
-        block->writeVariable(id, block->getNewest());
-    }
-}
-
 BasicBlock *GraphBuilder::processUnaryExprNode(BasicBlock *block, UnaryExpression &node)
 {
     block = processAstNode(block, *node.getArgument());
@@ -1016,15 +1026,7 @@ BasicBlock *GraphBuilder::processUpdateExprNode(BasicBlock *block, UpdateExpress
         block = processAstNode(block, *arg);
         argValue = block->getNewest();
         block->addNode({GraphNodeType::UnaryOperator, argValue, &node});
-        uint16_t value = block->getNewest();
-
-        const auto& resolvedIds = parentModule.getResolvedLocalIdentifiers();
-        auto declarationIt = resolvedIds.find((Identifier*)arg);
-        Identifier* declId = declarationIt != resolvedIds.end() ? declarationIt->second : nullptr;
-        if (isChildOf(declId, *fun.getBody()))
-            block->writeVariable(declId, value);
-        else
-            block->addNode({GraphNodeType::StoreValue, value, arg}, block->getNext());
+        writeVariableById(*block, *(Identifier*)arg, block->getNewest());
     } else if (arg->getType() == AstNodeType::MemberExpression) {
         auto leftExpr = (MemberExpression*)arg;
         block = processAstNode(block, *leftExpr->getObject());
@@ -1075,22 +1077,30 @@ BasicBlock *GraphBuilder::processTypeCastExpr(BasicBlock *block, TypeCastExpress
 
 BasicBlock *GraphBuilder::processSwitchStatement(BasicBlock *block, SwitchStatement &node)
 {
-    block = processAstNode(block, *node.getDiscriminant());
-    uint16_t discriminantNode = block->getNewest();
+    BasicBlock *tryBlock = &addBasicBlock({block->getSelfId()}, block->getScope().scopeForChildNode(&node));
+    block->setFilled();
+    tryBlock->setNext(block->getNext());
+    tryBlock->seal();
+    tryBlock = processAstNode(tryBlock, *node.getDiscriminant());
+    uint16_t discriminantNode = tryBlock->getNewest();
 
-    block->addNode({GraphNodeType::Switch, discriminantNode}, block->getNext());
-    uint16_t switchNodeId = block->getNext();
-    uint16_t prevBlockId = block->getSelfId();
+    tryBlock->addNode({GraphNodeType::Switch, discriminantNode}, tryBlock->getNext());
+    tryBlock->setFilled();
+    uint16_t switchNodeId = tryBlock->getNext();
+    uint16_t prevBlockId = tryBlock->getSelfId();
     vector<uint16_t> mergePrevs;
     vector<uint16_t> mergePrevBlocks;
 
-    if (node.getCases().empty())
-        return block;
+    if (node.getCases().empty()) {
+        BasicBlock* exitBlock = &addBasicBlock({prevBlockId}, block->getScope());
+        exitBlock->seal();
+        return exitBlock;
+    }
 
     pendingBreakBlocks.emplace_back();
     uint16_t prevCaseBlockId = 0;
     for (SwitchCase* caseNode : node.getCases()) {
-        BasicBlock *caseBlock = &graph->addBasicBlock({prevBlockId});
+        BasicBlock *caseBlock = &addBasicBlock({prevBlockId}, tryBlock->getScope().scopeForChildNode(&node));
         caseBlock->setNext(switchNodeId);
         if (BasicBlock *prevCaseBlock = prevCaseBlockId ? &graph->getBasicBlock(prevCaseBlockId) : nullptr) {
             if (!prevCaseBlock->isFilled()) {
@@ -1129,7 +1139,7 @@ BasicBlock *GraphBuilder::processSwitchStatement(BasicBlock *block, SwitchStatem
     pendingBreakBlocks.pop_back();
 
     // Create block for merge and add merge node
-    BasicBlock *mergeBlock = &graph->addBasicBlock(move(mergePrevBlocks));
+    BasicBlock *mergeBlock = &addBasicBlock(move(mergePrevBlocks), block->getScope());
     mergeBlock->seal();
     if (!mergePrevs.empty()) {
         mergeBlock->addNode({GraphNodeType::Merge}, mergePrevs);

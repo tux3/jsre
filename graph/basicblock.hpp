@@ -7,12 +7,15 @@
 
 class Graph;
 class GraphNode;
+class AstNode;
 class Identifier;
+struct LexicalBindings;
 
+// Our basic blocks are slightly different from traditional ones, as they are not allowed to cross scope boundaries (e.g. {} blocks)
 class BasicBlock
 {
 public:
-    BasicBlock(Graph& graph, uint16_t selfIndex, std::vector<uint16_t> prevs = {});
+    BasicBlock(Graph& graph, uint16_t selfIndex, const LexicalBindings& scope, bool shouldHoist, std::vector<uint16_t> prevs = {});
 
     const std::vector<uint16_t> &getPrevs();
     uint16_t getSelfId();
@@ -31,6 +34,8 @@ public:
     uint16_t addPhi(std::vector<uint16_t>&& inputs);
     uint16_t addIncompletePhi(Identifier &id);
 
+    const LexicalBindings& getScope() const;
+
     // Instead of adding a duplicate of a node that already exists, users may reuse an existing node and set it as newest
     void setNewest(uint16_t oldNode);
     // When a new basic block is created, it may be necessary to manually set which old node of a previous block should next nodes be added to
@@ -48,6 +53,7 @@ private:
     std::unordered_map<Identifier*, uint16_t> values;
     std::vector<uint16_t> prevs; // Index of the previous basic blocks
     std::vector<std::pair<Identifier*, uint16_t>> incompletePhis; // Indentifiers that had a phi inserted while the block wasn't sealed
+    const LexicalBindings& scope;
 
     Graph& graph;
     uint16_t selfIndex; // Index of the basic block in the graph's list

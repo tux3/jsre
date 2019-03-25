@@ -15,17 +15,12 @@ class MemberExpression;
 class ThisExpression;
 
 struct LexicalBindings {
-    LexicalBindings(LexicalBindings* parent, AstNode* code, bool isFullScope)
-        : typeDeclarations{}
-        , localDeclarations{}
-        , varDeclarations{isFullScope ? localDeclarations : parent->varDeclarations}
-        , children{}
-        , parent{parent}
-        , code{code}
-    {
-    }
+    LexicalBindings(LexicalBindings* parent, AstNode* code, bool isFullScope);
     LexicalBindings(const LexicalBindings& other) = delete;
     LexicalBindings(LexicalBindings&& other) = default;
+
+    // If this node introduces one of our children scope we return that scope, otherwise keeps the current scope
+    const LexicalBindings& scopeForChildNode(AstNode* node) const;
 
     std::unordered_map<std::string, Identifier*> typeDeclarations;
     std::unordered_map<std::string, Identifier*> localDeclarations;

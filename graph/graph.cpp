@@ -1,31 +1,15 @@
 #include "graph.hpp"
+#include "analyze/identresolution.hpp"
 #include <utility>
 #include <stdexcept>
 #include <cassert>
 
-const char* GraphNode::getTypeName() const {
-    if (type == GraphNodeType::Invalid)
-        return "Invalid";
-    #define X(GRAPH_NODE_TYPE) \
-        else if (type == GraphNodeType::GRAPH_NODE_TYPE) \
-            return #GRAPH_NODE_TYPE;
-    GRAPH_NODE_TYPE_LIST(X)
-    #undef X
-    else
-            throw new std::runtime_error("Unknown graph node type "+std::to_string((int)type));
-}
-
-AstNode *GraphNode::getAstReference() const
-{
-    return astReference;
-}
-
-Graph::Graph(Function &fun)
+Graph::Graph(Function &fun, const LexicalBindings &scope)
     : fun{fun}
 {
+    assert(scope.code == (AstNode*)&fun);
     nodes.emplace_back(GraphNodeType::Start);
-    BasicBlock& block = blocks.emplace_back(*this, 0);
-    block.seal();
+    nodes.emplace_back(GraphNodeType::Undefined); // The Undefined literal is used so often, we hardcode it once.
 }
 
 Function &Graph::getFun() const
@@ -46,6 +30,11 @@ const GraphNode &Graph::getNode(uint16_t n) const
 GraphNode &Graph::getNode(uint16_t n)
 {
     return nodes[n];
+}
+
+uint16_t Graph::getUndefinedNode()
+{
+    return 1; // We hardcode node 1 as the Undefined literal node.
 }
 
 uint16_t Graph::addNode(GraphNode &&node)
@@ -79,23 +68,23 @@ uint16_t Graph::addNode(GraphNode &&node, const std::vector<uint16_t>& prevs)
 
 uint16_t Graph::blockCount() const
 {
-    return blocks.size();
+    return static_cast<uint16_t>(blocks.size());
 }
 
 const BasicBlock &Graph::getBasicBlock(uint16_t n) const
 {
-    return blocks[n];
+    return *blocks[n];
 }
 
 BasicBlock &Graph::getBasicBlock(uint16_t n)
 {
-    return blocks[n];
+    return *blocks[n];
 }
 
-BasicBlock& Graph::addBasicBlock(std::vector<uint16_t> prevs)
+BasicBlock& Graph::addBasicBlock(std::vector<uint16_t> prevs, const LexicalBindings& scope, bool shouldHoist)
 {
     uint16_t newIndex = (uint16_t)blocks.size();
-    return blocks.emplace_back(*this, newIndex, move(prevs));
+    return *blocks.emplace_back(std::make_unique<BasicBlock>(*this, newIndex, scope, shouldHoist, move(prevs)));
 }
 
 GraphNode::GraphNode(GraphNodeType type, AstNode* astReference)
@@ -112,6 +101,23 @@ GraphNode::GraphNode(GraphNodeType type, uint16_t input, AstNode *astReference)
 GraphNode::GraphNode(GraphNodeType type, std::vector<uint16_t>&& inputs, AstNode* astReference)
     : inputs{std::move(inputs)}, astReference{astReference}, type{type}
 {
+}
+
+const char* GraphNode::getTypeName() const {
+    if (type == GraphNodeType::Invalid)
+        return "Invalid";
+    #define X(GRAPH_NODE_TYPE) \
+    else if (type == GraphNodeType::GRAPH_NODE_TYPE) \
+        return #GRAPH_NODE_TYPE;
+    GRAPH_NODE_TYPE_LIST(X)
+    #undef X
+    else
+        throw new std::runtime_error("Unknown graph node type "+std::to_string((int)type));
+}
+
+AstNode *GraphNode::getAstReference() const
+{
+    return astReference;
 }
 
 GraphNodeType GraphNode::getType() const

@@ -1,12 +1,37 @@
-#include "basicblock.hpp"
+#include "analyze/astqueries.hpp"
+#include "analyze/identresolution.hpp"
+#include "ast/ast.hpp"
+#include "graph/basicblock.hpp"
 #include "graph/graph.hpp"
+#include "graph/graphbuilder.hpp"
 #include <cassert>
 #include <algorithm>
 #include <vector>
 
-BasicBlock::BasicBlock(Graph &graph, uint16_t selfIndex, std::vector<uint16_t> prevs)
-    : prevs{prevs}, graph{graph}, selfIndex{selfIndex}, next{0}, newest{0}, sealed{false}, filled{false}
+BasicBlock::BasicBlock(Graph &graph, uint16_t selfIndex, const LexicalBindings &scope, bool shouldHoist, std::vector<uint16_t> prevs)
+    : prevs{prevs}, scope{scope}, graph{graph}, selfIndex{selfIndex}, next{0}, newest{0}, sealed{false}, filled{false}
 {
+    // Hoist bindings in the graph
+    // For this to work, we have to make sure BBs only have the same scope if the earliest one is reachable from the other ones,
+    // and only hoist bindings for that scope into the earliest BB (track already hoisted scopes in a set in Graph)
+    if (!shouldHoist)
+        return;
+    for (const auto& [name, declId] : scope.localDeclarations) {
+        // Skip parameters, instead of hoisting them as variables we use a LoadParameter node
+        if (!isChildOf(declId, *graph.getFun().getBody()))
+            continue;
+
+        // Functions and classes are special, they get initialized during hoisting
+        AstNode* decl = declId->getParent();
+        uint16_t value;
+        if (isFunctionNode(*decl) && ((Function*)decl)->getId() == declId)
+            value = addNode({GraphNodeType::Function, decl}, false);
+        else if (decl->getType() == AstNodeType::ClassDeclaration && ((ClassDeclaration*)decl)->getId() == declId)
+            value = addNode({GraphNodeType::Class, decl}, false);
+        else
+            value = graph.getUndefinedNode();
+        writeVariable(declId, value);
+    }
 }
 
 uint16_t BasicBlock::getSelfId()
@@ -158,7 +183,13 @@ uint16_t BasicBlock::addNode(GraphNode &&node, std::vector<uint16_t> &prevs, boo
 uint16_t BasicBlock::addPhi(std::vector<uint16_t>&& inputs)
 {
     assert(prevs.size() > 0);
-    uint16_t merge = graph.getNode(graph.getBasicBlock(prevs[0]).getNext()).getNext(0);
+    BasicBlock* prevBlock = &graph.getBasicBlock(prevs[0]);
+    // Skip empty blocks that stole the previous block's next, we don't want to insert a phi in there.
+    while (prevBlock->getPrevs().size() == 1 && prevBlock->next == graph.getBasicBlock(prevBlock->getPrevs()[0]).next) {
+        assert(prevBlock->getPrevs().size() == 1);
+        prevBlock = &graph.getBasicBlock(prevBlock->getPrevs()[0]);
+    }
+    uint16_t merge = graph.getNode(prevBlock->getNext()).getNext(0);
     assert(graph.getNode(merge).getType() == GraphNodeType::Merge);
 
     uint16_t insertPoint = merge;
@@ -185,8 +216,18 @@ uint16_t BasicBlock::addPhi(std::vector<uint16_t>&& inputs)
         prevNode.addNext(phi);
     }
 
-    if (insertPoint == next)
+    // If we're appending a node in a block, we need to update its next.
+    // If there's an empty block right after this one, it shares our next, so we need to update it too
+    if (insertPoint == next) {
         next = newest = phi;
+        for (uint16_t blockIndex = selfIndex+1; blockIndex < graph.blockCount(); ++blockIndex) {
+            auto& block = graph.getBasicBlock(blockIndex);
+            if (block.next == insertPoint) {
+                assert(block.prevs.size() == 1 && block.prevs[0] == selfIndex); // Empty blocks should only ever have us as prev
+                block.next = block.newest = phi;
+            }
+        }
+    }
     return phi;
 }
 
@@ -195,6 +236,11 @@ uint16_t BasicBlock::addIncompletePhi(Identifier& id)
     uint16_t phi = addPhi({});
     incompletePhis.push_back({&id, phi});
     return phi;
+}
+
+const LexicalBindings &BasicBlock::getScope() const
+{
+    return scope;
 }
 
 void BasicBlock::setNewest(uint16_t oldNode)

@@ -24,6 +24,8 @@
     X(Await)                    \
     X(BinaryOperator)           \
     X(UnaryOperator)            \
+    X(LoadParameter)            \
+    X(StoreParameter)           \
     X(LoadValue)                \
     X(StoreValue)               \
     X(LoadProperty)             \
@@ -32,6 +34,7 @@
     X(StoreNamedProperty)       \
     X(Spread)                   \
     X(Function)                 \
+    X(Class)                    \
     X(If)                       \
     X(IfTrue)                   \
     X(IfFalse)                  \
