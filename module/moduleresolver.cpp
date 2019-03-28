@@ -93,7 +93,9 @@ fs::path ModuleResolver::resolve(fs::path fromPath, string requestedName)
     if (requestedName[0] == '/')
         basePath = basePath.root_path();
 
-    if (requestedName[0] == '/' || (requestedName[0] == '.' && (requestedName[1] == '/' || (requestedName[1] == '.' && requestedName[2] == '/')))) {
+    auto isDot = [](const string& name){ return name.length() >= 1 && name[0] == '.' && (name[1] == '/' || name[1] == '\0'); };
+    auto isDotDot = [](const string& name){ return name.length() >= 2 && name[0] == '.' && name[1] == '.' && (!name[2] || name[2] == '/'); };
+    if (requestedName.length() && (requestedName[0] == '/' || isDot(requestedName) || isDotDot(requestedName))) {
         if (fullPath = resolveAsFile(basePath / requestedName); !fullPath.empty())
             return fullPath;
         if (fullPath = resolveAsDirectory(basePath / requestedName); !fullPath.empty())
