@@ -16,13 +16,16 @@ namespace fs = filesystem;
 [[noreturn]]
 void helpAndDie(const char* selfPath, bool fullHelp = false)
 {
-    cout << "Usage: " << selfPath << " [-s] [-d] <file.js | package.json | directory>" << endl;
+    cout << "Usage: " << selfPath << " [OPTION]... <file.js | package.json | directory>" << endl;
     if (!fullHelp)
         exit(EXIT_FAILURE);
 
+    cout << "Target:\n";
     cout << "  <file.js>        Analyze a single file\n";
     cout << "  <directory>      Analyze all .js files in this directory (excluding node_modules)\n";
     cout << "  <package.json>   Analyze all project files imported from the main file\n";
+    cout << "Options:\n";
+    cout << "  -h               Show this help message\n";
     cout << "  -s               Show suggestions. Not recommended, as it may include many false positives\n";
     cout << "  -d               Show debug output\n";
     exit(EXIT_SUCCESS);
