@@ -7,6 +7,7 @@
 #include <future>
 #include <v8.h>
 #include "basicmodule.hpp"
+#include "analyze/identresolution.hpp"
 #include "graph/graph.hpp"
 
 class IsolateWrapper;
@@ -14,7 +15,6 @@ class AstRoot;
 class Identifier;
 class ImportSpecifier;
 class Function;
-struct LexicalBindings;
 
 class Module final : public BasicModule {
 public:

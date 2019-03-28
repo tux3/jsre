@@ -1,10 +1,19 @@
-set(TEST_SRCS "test/test_main.cpp")
+set(TEST_SRCS "test/test_main.cpp" "test/test.hpp")
 
-# Generate ident resolution test cases
-file(GLOB IDENT_RESOLUTION_TEST_CASE_FILES "${PROJECT_SOURCE_DIR}/test/identresolution/*.js")
-string(REPLACE ";" "\", \n\"" IDENT_RESOLUTION_TEST_CASE_FILES "${IDENT_RESOLUTION_TEST_CASE_FILES}")
-configure_file("${PROJECT_SOURCE_DIR}/test/identresolution/test.cpp.in" "${PROJECT_BINARY_DIR}/generated/test/identresolution/test.cpp")
-list(APPEND TEST_SRCS "${PROJECT_BINARY_DIR}/generated/test/identresolution/test.cpp")
+function(add_tests_with_sample_files test_dirs)
+    foreach(test_dir ${ARGV})
+        file(GLOB TEST_CASE_FILES "${PROJECT_SOURCE_DIR}/test/${test_dir}/*.js")
+        string(REPLACE ";" "\", \n\"" TEST_CASE_FILES "${TEST_CASE_FILES}")
+        configure_file("${PROJECT_SOURCE_DIR}/test/${test_dir}/test.cpp.in" "${PROJECT_BINARY_DIR}/generated/test/${test_dir}/test.cpp")
+        list(APPEND TEST_SRCS "${PROJECT_BINARY_DIR}/generated/test/${test_dir}/test.cpp")
+    endforeach(test_dir)
+    set(TEST_SRCS "${TEST_SRCS}" PARENT_SCOPE)
+endfunction(add_native_modules)
+
+add_tests_with_sample_files(
+    identresolution
+    typecheck/scoping
+)
 
 # Main test target
 add_executable("${PROJECT_NAME}_tests" ${TEST_SRCS})

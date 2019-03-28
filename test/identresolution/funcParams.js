@@ -8,9 +8,9 @@ function f( // decl 5
         =a // decl 2
 ) {
     const a // decl 10
-            = y; // decl 14
+            = y; // decl 7
     return a  // decl 10
-            + y; // decl 14
+            + y; // decl 7
     var y = 2; // decl 14
 }
 

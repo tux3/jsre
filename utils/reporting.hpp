@@ -20,6 +20,7 @@ void setSuggest(bool enable);
 
 // Returns the current statistics on the number of reports since the start
 const ReportingStats& getReportingStatistics();
+void resetReportingStatistics();
 
 void trace(const std::string& msg); //< Debug information.
 void trace(const AstNode &node, const std::string& msg); //< Debug information.

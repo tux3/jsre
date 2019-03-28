@@ -101,3 +101,11 @@ const ReportingStats &getReportingStatistics()
 {
     return globalStats;
 }
+
+void resetReportingStatistics()
+{
+    globalStats.errors = 0;
+    globalStats.warnings = 0;
+    globalStats.suggestions = 0;
+    globalStats.traces = 0;
+}

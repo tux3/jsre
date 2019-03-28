@@ -22,7 +22,6 @@ struct ScopedTypes
     unsigned visited = 0;
 };
 
-void typecheckGraph(Graph& graph);
 void runTypechecks(Module& module);
 
 #endif // TYPECHECK_HPP

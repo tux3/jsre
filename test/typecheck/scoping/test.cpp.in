@@ -1,0 +1,65 @@
+#include <catch.hpp>
+#include <string>
+#include <vector>
+
+#include "test.hpp"
+#include "ast/ast.hpp"
+#include "ast/parse.hpp"
+#include "ast/walk.hpp"
+#include "analyze/astqueries.hpp"
+#include "analyze/typecheck.hpp"
+#include "module/module.hpp"
+#include "utils/reporting.hpp"
+#include "v8/isolatewrapper.hpp"
+
+using namespace std;
+namespace fs = std::filesystem;
+
+static vector<string> filesToTest = {};
+
+static void testNextFile() {
+    string path = filesToTest.back();
+    filesToTest.pop_back();
+
+    IsolateWrapper& isolateWrapper = getIsolateWrapper();
+
+    startParsingThreads();
+    Module module(isolateWrapper, path);
+    stopParsingThreads();
+
+    setSuggest(true);
+    resetReportingStatistics();
+
+    walkAst(module.getAst(), [&](AstNode& node){
+        if (!isFunctionNode(node))
+            return;
+
+        auto& fun = (Function&)node;
+        auto graph = module.getFunctionGraph(fun);
+        REQUIRE(graph);
+    });
+
+    runTypechecks(module);
+
+    const auto& stats = getReportingStatistics();
+    REQUIRE(stats.errors == 0);
+    REQUIRE(stats.warnings == 0);
+    REQUIRE(stats.suggestions == 0);
+}
+
+static struct RegisterTypecheckScopingTestCases {
+    RegisterTypecheckScopingTestCases();
+} registerCases;
+
+RegisterTypecheckScopingTestCases::RegisterTypecheckScopingTestCases() {
+    const char* cases[] = {
+        "@TEST_CASE_FILES@"
+    };
+
+    for (auto filepath : cases) {
+        filesToTest.insert(begin(filesToTest), filepath);
+        auto filename = fs::path(filepath).filename();
+        auto testName = "Typecheck scoping for test file "+filename.string();
+        REGISTER_TEST_CASE(testNextFile, testName.c_str(), "[typecheck][scoping]")
+    }
+}

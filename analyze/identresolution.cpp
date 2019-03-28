@@ -28,7 +28,8 @@ const LexicalBindings &LexicalBindings::scopeForChildNode(AstNode *node) const
     return *this;
 }
 
-static void instantiateScopeDeclarations(unordered_map<Identifier*, Identifier*>& identifierTargets, LexicalBindings& bindings);
+static void instantiateScopeDeclarations(unordered_map<Identifier*, Identifier*>& identifierTargets, LexicalBindings& bindings,
+                                         const vector<Identifier*>& mergeVarsWithParentFunParams = {});
 
 static bool isFullScopeNodeType(AstNodeType type)
 {
@@ -213,7 +214,15 @@ static void instantiateScopeNodeInnerDeclaration(vector<Identifier*>& varDeclara
         walkTypeParameterDeclarations(bindings.typeDeclarations, ((Function*)node)->getTypeParameters());
 }
 
-static void instantiateScopeDeclarations(unordered_map<Identifier*, Identifier*>& identifierTargets, LexicalBindings& bindings)
+/*
+ * The mergeVarsWithParentFunParams option handles the special case of vars sharing a binding with parameters of the same name.
+ * We only need this flag when the parent function has parameter expressions, since that forces us to create a new full scope
+ * to isolate the param exprs from seeing var declarations made by the body. But as a consequence of making that full scope,
+ * vars declared in the body would end up in the body's full scope instead of sharing a binding with the parent function's parameter.
+ * This vector instructs us to check in the parent's params and not re-declare a binding if it normally wouldn't exist.
+ */
+static void instantiateScopeDeclarations(unordered_map<Identifier*, Identifier*>& identifierTargets, LexicalBindings& bindings,
+                                         const vector<Identifier*>& mergeVarsWithParentFunParams)
 {
     vector<Identifier*> varDeclarations, lexicalDeclarations;
     unordered_map<string, Identifier*> functionDeclarations;
@@ -223,11 +232,14 @@ static void instantiateScopeDeclarations(unordered_map<Identifier*, Identifier*>
     if (isFunctionNode(*bindings.code)) {
         auto& fun = (Function&)*bindings.code;
         bool hasParameterExpressions = false;
+        vector<Identifier*> paramDeclarations;
         for (auto const& param : fun.getParams()) {
-            walkComplexDeclaration(varDeclarations, *param);
+            walkComplexDeclaration(paramDeclarations, *param);
             if (param->getType() != AstNodeType::Identifier && param->getType() != AstNodeType::RestElement)
                 hasParameterExpressions = true;
         }
+        for (auto id : paramDeclarations)
+            varDeclarations.push_back(id);
 
         if (auto returnType = fun.getReturnType())
             walkChildrenForDeclarations(identifierTargets, bindings.typeDeclarations, varDeclarations,
@@ -236,13 +248,15 @@ static void instantiateScopeDeclarations(unordered_map<Identifier*, Identifier*>
             walkChildrenForDeclarations(identifierTargets, bindings.typeDeclarations, varDeclarations,
                                         lexicalDeclarations, functionDeclarations, bindings, *typeParamDecl);
 
-        if (hasParameterExpressions || isFullScopeNodeType((fun.getBody()->getType()))) {
+        bool isFullScope = isFullScopeNodeType((fun.getBody()->getType()));
+        bool isPartialScope = isPartialScopeNodeType(fun.getBody()->getType());
+        if (hasParameterExpressions) {
             // The standard says we have to create a separate scope for params and body if we have parameter expressions
+            // The point is to make sure closures in the parameter expressions don't have visibility into the function body's bindings
             auto& bodyScope = bindings.children.emplace_back(make_unique<LexicalBindings>(&bindings, fun.getBody(), true));
-            instantiateScopeDeclarations(identifierTargets, *bodyScope);
-        } else if (isPartialScopeNodeType(fun.getBody()->getType())) {
-            // Note that we're not creating a full separate scope (standard doesn't ask), but if the body is e.g. a Block it still needs a partial one
-            auto& bodyScope = bindings.children.emplace_back(make_unique<LexicalBindings>(&bindings, fun.getBody(), false));
+            instantiateScopeDeclarations(identifierTargets, *bodyScope, varDeclarations);
+        } else if (isPartialScope || isFullScope) {
+            auto& bodyScope = bindings.children.emplace_back(make_unique<LexicalBindings>(&bindings, fun.getBody(), isFullScope));
             instantiateScopeDeclarations(identifierTargets, *bodyScope);
         } else {
             walkChildrenForDeclarations(identifierTargets, bindings.typeDeclarations, varDeclarations,
@@ -256,6 +270,11 @@ static void instantiateScopeDeclarations(unordered_map<Identifier*, Identifier*>
     for (Identifier* id : varDeclarations) {
         bindings.varDeclarations[id->getName()] = id;
         identifierTargets[id] = id;
+    }
+    // Note that if we are an actual full scope (e.g. an ArrowFunction in an ArrowFunction), this doesn't apply (we don't share anything with our parent fun)
+    if (isPartialScopeNodeType(bindings.code->getType())) {
+        for (auto paramId : mergeVarsWithParentFunParams)
+            bindings.varDeclarations.erase(paramId->getName()); // Don't re-declare, share the parent's bindings
     }
     for (Identifier* id : lexicalDeclarations) {
         bindings.localDeclarations[id->getName()] = id;

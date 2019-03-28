@@ -11,6 +11,7 @@
 #include <iostream>
 #include <v8.h>
 
+#include "test.hpp"
 #include "ast/ast.hpp"
 #include "ast/parse.hpp"
 #include "analyze/identresolution.hpp"
@@ -23,7 +24,6 @@
 using namespace std;
 namespace fs = std::filesystem;
 
-static IsolateWrapper isolateWrapper;
 static vector<string> filesToTest = {};
 
 static void testNextFile() {
@@ -32,6 +32,7 @@ static void testNextFile() {
 
     startParsingThreads();
 
+    IsolateWrapper& isolateWrapper = getIsolateWrapper();
     string script = readFileStr(path.c_str());
     Module module(isolateWrapper, path);
     AstRoot& astRoot = *parseSourceScriptAsync(module, script, true).get();
@@ -105,7 +106,7 @@ static struct RegisterIdentResolutionTestCases {
 
 RegisterIdentResolutionTestCases::RegisterIdentResolutionTestCases() {
     const char* cases[] = {
-        "@IDENT_RESOLUTION_TEST_CASE_FILES@"
+        "@TEST_CASE_FILES@"
     };
 
     for (auto filepath : cases) {
