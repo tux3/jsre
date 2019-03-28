@@ -93,9 +93,9 @@ void findUnusedLocalDeclarations(Module &module)
         } else if (identifier.getParent()->getType() == AstNodeType::ImportSpecifier) {
             warn(identifier, "Unused import of "s+identifier.getName());
         } else if (isFunctionParameterIdentifier(identifier)) {
-            warn(identifier, "Unused parameter "s+identifier.getName());
+            suggest(identifier, "Unused parameter "s+identifier.getName());
         } else {
-            warn(identifier, "Unused declaration of identifier "s+identifier.getName());
+            suggest(identifier, "Unused declaration of identifier "s+identifier.getName());
         }
     }
 }
