@@ -36,9 +36,9 @@ AstSourceSpan::AstSourceSpan(AstSourcePosition start, AstSourcePosition end)
 std::string AstSourceSpan::toString(const std::string &source)
 {
     const char* beg_ptr = source.data();
-    utf8::advance(beg_ptr, start.offset, source.data()+source.size());
+    utf8::unchecked::advance(beg_ptr, start.offset);
     const char* end_ptr = beg_ptr;
-    utf8::advance(end_ptr, end.offset-start.offset, source.data()+source.size());
+    utf8::unchecked::advance(end_ptr, end.offset-start.offset);
 
     return std::string(beg_ptr, end_ptr);
 }

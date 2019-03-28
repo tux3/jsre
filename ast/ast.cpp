@@ -65,9 +65,9 @@ string AstNode::getSourceString()
     const string& source = getParentModule().getOriginalSource();
 
     const char* beg_ptr = source.data();
-    utf8::advance(beg_ptr, location.start.offset, source.data()+source.size());
+    utf8::unchecked::advance(beg_ptr, location.start.offset);
     const char* end_ptr = beg_ptr;
-    utf8::advance(end_ptr, location.end.offset - location.start.offset, source.data()+source.size());
+    utf8::unchecked::advance(end_ptr, location.end.offset - location.start.offset);
 
     return string(beg_ptr, end_ptr - beg_ptr);
 }

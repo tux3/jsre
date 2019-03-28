@@ -21,7 +21,7 @@ void blankNextComma(std::string &source, AstNode &node)
 void blankNextComma(std::string &source, size_t position)
 {
     char* ptr = source.data();
-    utf8::advance(ptr, position, ptr+source.size());
+    utf8::unchecked::advance(ptr, position);
     while (isspace(*ptr))
         ptr++;
     if (*ptr == ',')
@@ -31,9 +31,9 @@ void blankNextComma(std::string &source, size_t position)
 void blankRange(std::string &source, size_t position, size_t count)
 {
     char* beg_ptr = source.data();
-    utf8::advance(beg_ptr, position, source.data()+source.size());
+    utf8::unchecked::advance(beg_ptr, position);
     char* end_ptr = beg_ptr;
-    utf8::advance(end_ptr, count, source.data()+source.size());
+    utf8::unchecked::advance(end_ptr, count);
 
     size_t bytes_start_pos = static_cast<size_t>(beg_ptr-source.data());
     size_t bytes_count = static_cast<size_t>(end_ptr - beg_ptr);
@@ -45,24 +45,22 @@ void blankRange(std::string &source, size_t position, size_t count)
 
 void blankNext(std::string &source, size_t start, char byte)
 {
-    char* end_ptr = source.data()+source.size();
     char* ptr = source.data();
-    utf8::advance(ptr, start, source.data()+source.size());
+    utf8::unchecked::advance(ptr, start);
 
     while (*ptr != byte)
-        utf8::next(ptr, end_ptr);
+        utf8::unchecked::next(ptr);
     *ptr = ' ';
 }
 
 void blankUntil(std::string &source, size_t start, char byte)
 {
-    char* end_ptr = source.data()+source.size();
     char* ptr = source.data();
-    utf8::advance(ptr, start, source.data()+source.size());
+    utf8::unchecked::advance(ptr, start);
 
     size_t char_count = 0;
     while (*ptr != byte) {
-        utf8::next(ptr, end_ptr);
+        utf8::unchecked::next(ptr);
         char_count++;
     }
 
