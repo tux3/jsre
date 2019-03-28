@@ -12,7 +12,7 @@ function f1(){ // decl 6
 }
 
 class C { // decl 14
-    method( // decl 15
+    method( // Methods (and properties) aren't declarations in any scope. They're keys of the object.
         arg // decl 16
     ) {
         // Function declarations shadow vars during hoisting (and assignment takes priority back, but that's not resolvable statically)
@@ -23,7 +23,7 @@ class C { // decl 14
         function x(){}; // decl 23
     }
     
-    prop = 2; // decl 26
+    prop = 2;
 }
 
 if (true) {

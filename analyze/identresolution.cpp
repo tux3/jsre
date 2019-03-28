@@ -154,24 +154,6 @@ static void walkChildrenForDeclarations(unordered_map<Identifier*, Identifier*>&
             auto fun = (Function*)node;
             if (auto id = fun->getId())
                 functionDeclarations[id->getName()] = id;
-        } else if (type == AstNodeType::ObjectMethod) {
-            auto decl = (ObjectMethod*)node;
-            if (auto keyNode = decl->getKey(); !decl->isComputed()) {
-                auto key = (Identifier*)keyNode;
-                functionDeclarations[key->getName()] = key;
-            }
-        } else if (type == AstNodeType::ClassMethod || type == AstNodeType::ClassPrivateMethod) {
-            auto method = (ClassBaseMethod*)node;
-            if (auto keyNode = method->getKey(); !method->isComputed()) {
-                auto key = (Identifier*)keyNode;
-                functionDeclarations[key->getName()] = key;
-            }
-        } else if (type == AstNodeType::ClassProperty || type == AstNodeType::ClassPrivateProperty) {
-            auto prop = (ClassBaseProperty*)node;
-            if (auto keyNode = prop->getKey(); !prop->isComputed()) {
-                auto key = (Identifier*)keyNode;
-                functionDeclarations[key->getName()] = key;
-            }
         } else if (type == AstNodeType::ClassDeclaration) {
             auto decl = (ClassDeclaration*)node;
             lexicalDeclarations.push_back(decl->getId());

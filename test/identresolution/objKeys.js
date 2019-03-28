@@ -17,13 +17,14 @@ var obj2 = { // decl 11
 var z = 2; // decl 17
 
 let objMethods = { // decl 19
-    method( // decl 20
+    method(
         i // decl 21
     ) {
         if (i) { // decl 21
-            method( // decl 20
+            return 1+this.method(
                 i-1 // decl 21
             )
         }
+        return 1;
     }
 }

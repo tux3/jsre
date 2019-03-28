@@ -15,7 +15,7 @@ let recursive // decl 3
 let Class; // decl 15
 let cls // decl 16
     = class Class { // decl 17
-    constructor() { // decl 18
+    constructor() {
         new Class(); // decl 17
     }
 }
