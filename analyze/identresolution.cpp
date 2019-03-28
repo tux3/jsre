@@ -460,6 +460,8 @@ AstNode *resolveImportedIdentifierDeclaration(AstNode &importSpec)
                 isType = true;
             else if (((ImportDeclaration*)importSpec.getParent())->getKind() == ImportDeclaration::Kind::Type)
                 isType = true;
+        } else if (importSpec.getType() == AstNodeType::ImportDefaultSpecifier) {
+            importSpecName = "default";
         }
     }
 
@@ -470,39 +472,37 @@ AstNode *resolveImportedIdentifierDeclaration(AstNode &importSpec)
     AstNode* exported = nullptr;
     if (importSpec.getType() == AstNodeType::ImportDefaultSpecifier) {
         walkAst(importedMod.getAst(), [&](AstNode& node) {
-            if (node.getType() == AstNodeType::ExportDefaultDeclaration) {
-                exported = ((ExportDefaultDeclaration&)node).getDeclaration();
-            } else if (node.getType() == AstNodeType::ExportSpecifier) {
-                auto& specifier = (ExportSpecifier&)node;
-                if (specifier.getExported()->getName() == "default")
-                    exported = specifier.getLocal();
-            }
+            exported = ((ExportDefaultDeclaration&)node).getDeclaration();
         }, [&](AstNode& node) {
-            if (node.getType() == AstNodeType::ExportDefaultDeclaration || node.getType() == AstNodeType::ExportSpecifier)
+            if (node.getType() == AstNodeType::ExportDefaultDeclaration)
                 return WalkDecision::WalkOver;
             else if (node.getType() == AstNodeType::ExportNamedDeclaration)
                 return WalkDecision::SkipInto;
             else
                 return WalkDecision::SkipOver;
         });
-
-        if (exported && exported->getType() == AstNodeType::Identifier) {
-            const auto& resolvedLocals = importedMod.getResolvedLocalIdentifiers();
-            const auto& resolvedIt = resolvedLocals.find((Identifier*)exported);
-            if (resolvedIt != resolvedLocals.end())
-                exported = resolvedIt->second;
-        }
-    } else if (importSpec.getType() == AstNodeType::ImportSpecifier || importSpec.getType() == AstNodeType::ExportSpecifier) {
-        auto& scopeChain = importedMod.getScopeChain();
-        if (isType) {
-            if (auto it = scopeChain.typeDeclarations.find(importSpecName); it != scopeChain.typeDeclarations.end())
-                return it->second;
-        }
-        if (auto it = scopeChain.localDeclarations.find(importSpecName); it != scopeChain.localDeclarations.end())
-            return it->second;
-    } else {
-        assert(false && "Unexpected import specifier type");
     }
+
+    walkAst(importedMod.getAst(), [&](AstNode& node) {
+        auto& specifier = (ExportSpecifier&)node;
+        if (specifier.getExported()->getName() == importSpecName)
+            exported = specifier.getLocal();
+    }, [&](AstNode& node) {
+        if (node.getType() == AstNodeType::ExportSpecifier)
+            return WalkDecision::WalkOver;
+        else if (node.getType() == AstNodeType::ExportNamedDeclaration)
+            return WalkDecision::SkipInto;
+        else
+            return WalkDecision::SkipOver;
+    });
+
+    if (exported && exported->getType() == AstNodeType::Identifier) {
+        const auto& resolvedLocals = importedMod.getResolvedLocalIdentifiers();
+        const auto& resolvedIt = resolvedLocals.find((Identifier*)exported);
+        if (resolvedIt != resolvedLocals.end())
+            exported = resolvedIt->second;
+    }
+
     return exported;
 }
 
