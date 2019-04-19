@@ -110,7 +110,7 @@ add_headers_sources(
 find_library(ICUUC_LIB NAMES icuuc)
 find_library(ICUI18N_LIB NAMES icui18n)
 
-set(V8_STATIC_LIBS "v8_base" "v8_external_snapshot" "v8_libplatform" "v8_libbase" "v8_libsampler")
+set(V8_STATIC_LIBS "v8_compiler_opt" "v8_base_without_compiler" "v8_compiler_opt" "v8_external_snapshot" "v8_libplatform" "v8_libbase" "v8_libsampler")
 
 add_library("${PROJECT_NAME}_lib" STATIC ${SRCS})
 target_include_directories("${PROJECT_NAME}_lib" PUBLIC ${V8_INCLUDE_DIR} ${PROJECT_SOURCE_DIR} ${PROJECT_BINARY_DIR}/generated)
